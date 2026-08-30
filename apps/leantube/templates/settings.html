@@ -1,0 +1,264 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Settings</h1>
+
+<section class="settings-section">
+    <h2>Admin</h2>
+    {% if admin %}
+    <p style="color:#7d7;margin-bottom:0.5rem">Logged in as admin</p>
+    <form method="POST">
+        <input type="hidden" name="action" value="admin_logout">
+        <button type="submit" class="btn btn-sm">Logout</button>
+    </form>
+    {% else %}
+    <form method="POST" class="settings-form">
+        <input type="hidden" name="action" value="admin_login">
+        <div class="form-group">
+            <label for="admin-password">Admin Password</label>
+            <input type="password" id="admin-password" name="password" placeholder="Enter admin password">
+        </div>
+        <button type="submit" class="btn">Login</button>
+    </form>
+    {% endif %}
+</section>
+
+<section class="settings-section">
+    <h2>Download Configuration</h2>
+    <form method="POST" class="settings-form">
+        <input type="hidden" name="action" value="save_config">
+        <div class="form-group">
+            <label for="download_path">Download Directory</label>
+            <input type="text" id="download_path" name="download_path"
+                   value="{{ download_path }}" placeholder="/mnt/vice_clips">
+            <span class="form-hint">Absolute path to store downloaded videos</span>
+        </div>
+        <div class="form-group">
+            <label class="checkbox-label">
+                <input type="checkbox" name="auto_download" value="1"
+                       {% if auto_download == '1' %}checked{% endif %}>
+                Auto-download on scan
+            </label>
+        </div>
+        <div class="form-group">
+            <label class="checkbox-label">
+                <input type="checkbox" name="auto_scan_enabled" value="1"
+                       {% if auto_scan_enabled == '1' %}checked{% endif %}>
+                Auto-scan (incremental) every
+            </label>
+            <div style="display:flex;align-items:center;gap:0.5rem;margin-top:0.25rem">
+                <input type="number" name="auto_scan_interval" value="{{ auto_scan_interval }}"
+                       min="1" style="width:80px;padding:0.3rem 0.5rem;background:#1a1a1a;border:1px solid #333;border-radius:4px;color:#eee;font-size:0.85rem">
+                <span style="font-size:0.85rem;color:#888">minutes</span>
+            </div>
+            <span class="form-hint">Checks for new clips every N minutes. Scans ~50 new numbers per cycle.</span>
+        </div>
+        <button type="submit" class="btn">Save</button>
+    </form>
+</section>
+
+<section class="settings-section">
+    <h2>Profiles</h2>
+
+    <form method="POST" class="add-profile-form">
+        <input type="hidden" name="action" value="add_profile">
+        <div class="form-row">
+            <div class="form-group">
+                <label for="name">Name</label>
+                <input type="text" id="name" name="name" placeholder="e.g. Desk PC" required>
+            </div>
+            <div class="form-group">
+                <label for="ip">IP Address</label>
+                <input type="text" id="ip" name="ip" placeholder="192.168.1.10" required>
+            </div>
+            <div class="form-group">
+                <label for="port">Port</label>
+                <input type="number" id="port" name="port" placeholder="8766" required>
+            </div>
+            <div class="form-group">
+                <label for="pattern">URL Pattern</label>
+                <input type="text" id="pattern" name="pattern" placeholder="c/Vice_Clip_{n}" value="c/Vice_Clip_{n}">
+                <span class="form-hint"><code>{n}</code> is replaced with the clip number</span>
+            </div>
+            <button type="submit" class="btn">Add</button>
+        </div>
+    </form>
+
+    {% if profiles %}
+    <div class="table-wrap">
+        <table>
+            <thead>
+                <tr>
+                    <th>Name</th>
+                    <th>IP</th>
+                    <th>Port</th>
+                    <th>Pattern</th>
+                    <th>Clips</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for profile in profiles %}
+                <tr>
+                    <td>{{ profile.name }}</td>
+                    <td>{{ profile.ip }}</td>
+                    <td>{{ profile.port }}</td>
+                    <td>
+                        <form method="POST" class="inline-pattern-form">
+                            <input type="hidden" name="action" value="update_pattern">
+                            <input type="hidden" name="profile_id" value="{{ profile.id }}">
+                            <input type="text" name="pattern" value="{{ profile.pattern }}"
+                                   class="pattern-input" title="Example: c/Vice_Clip_{n}">
+                            <button type="submit" class="btn btn-sm btn-pattern">Save</button>
+                        </form>
+                    </td>
+                    <td>{{ profile.clips.count() }}</td>
+                    <td class="actions">
+                        <form method="POST" style="display:inline">
+                            <input type="hidden" name="action" value="scan">
+                            <input type="hidden" name="profile_id" value="{{ profile.id }}">
+                            <button type="submit" class="btn btn-sm scan-btn">Scan</button>
+                        </form>
+                        <form method="POST" style="display:inline"
+                              onsubmit="return confirm('Delete {{ profile.name }}?')">
+                            <input type="hidden" name="action" value="delete_profile">
+                            <input type="hidden" name="profile_id" value="{{ profile.id }}">
+                            <button type="submit" class="btn btn-sm btn-danger">Delete</button>
+                        </form>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    <form method="POST" style="margin-top:0.75rem">
+        <input type="hidden" name="action" value="scan">
+        <button type="submit" class="btn scan-btn">Scan All (incremental)</button>
+    </form>
+    {% else %}
+    <p class="empty-note">No profiles added yet. Add one above.</p>
+    {% endif %}
+</section>
+
+<section class="settings-section">
+    <h2>URL Tester</h2>
+    <p class="form-hint" style="margin-bottom:0.5rem">Test a clip URL, extract video source, inspect HTML:</p>
+    <div class="form-row">
+        <div class="form-group" style="flex:3">
+            <input type="text" id="test-url-input" placeholder="http://IP:PORT/c/Vice_Clip_64">
+        </div>
+        <button class="btn" onclick="testUrl()" style="margin-bottom:0.75rem">Test</button>
+        <button class="btn" onclick="inspectHtml()" style="margin-bottom:0.75rem">Inspect HTML</button>
+    </div>
+    <pre id="test-url-result" style="background:#1a1a1a;padding:0.5rem;border-radius:4px;font-size:0.8rem;display:none"></pre>
+</section>
+
+<section class="settings-section">
+    <h2>Scan Log</h2>
+    <div style="display:flex;gap:0.5rem;align-items:center;margin-bottom:0.5rem;flex-wrap:wrap">
+        <span id="scan-status-badge" style="display:inline-block;padding:2px 8px;border-radius:4px;font-size:0.75rem;font-weight:600">Idle</span>
+        <button class="btn btn-sm" id="poll-btn" onclick="togglePoll()">Auto-refresh</button>
+        <button class="btn btn-sm" onclick="fetchStatus()">Refresh</button>
+    </div>
+    <pre id="scan-log" style="background:#111;border:1px solid #2a2a2a;border-radius:6px;padding:0.75rem;font-size:0.8rem;max-height:400px;overflow-y:auto;white-space:pre-wrap;word-break:break-all;font-family:monospace;color:#aaa"></pre>
+</section>
+
+<script>
+let pollTimer = null;
+
+function fetchStatus() {
+    fetch('/LeanTube/api/scan-status')
+        .then(r => r.json())
+        .then(data => {
+            const badge = document.getElementById('scan-status-badge');
+            if (data.scanning) {
+                badge.textContent = 'Scanning...';
+                badge.style.background = '#3a3a1a';
+                badge.style.color = '#dd7';
+            } else {
+                badge.textContent = 'Idle';
+                badge.style.background = '#1a3a1a';
+                badge.style.color = '#7d7';
+            }
+            const el = document.getElementById('scan-log');
+            if (!data.logs || data.logs.length === 0) {
+                if (!data.scanning) el.textContent = '(no log entries yet)';
+                return;
+            }
+            el.textContent = data.logs.map(l => `[${l[0]}] ${l[1]}`).join('\n');
+            el.scrollTop = el.scrollHeight;
+            document.querySelectorAll('.scan-btn').forEach(b => b.disabled = data.scanning);
+        })
+        .catch(() => {});
+}
+
+function togglePoll() {
+    const btn = document.getElementById('poll-btn');
+    if (pollTimer) {
+        clearInterval(pollTimer);
+        pollTimer = null;
+        btn.textContent = 'Auto-refresh';
+        return;
+    }
+    btn.textContent = 'Stop';
+    fetchStatus();
+    pollTimer = setInterval(fetchStatus, 1500);
+}
+
+function testUrl() {
+    const url = document.getElementById('test-url-input').value.trim();
+    const el = document.getElementById('test-url-result');
+    if (!url) { el.textContent = 'Enter a URL'; el.style.display = 'block'; return; }
+    el.textContent = 'Testing...';
+    el.style.display = 'block';
+    fetch('/LeanTube/api/test-url?url=' + encodeURIComponent(url))
+        .then(r => r.json())
+        .then(data => {
+            let lines = [];
+            if (data.ok) {
+                lines.push(`Status ${data.status} (${data.content_type})`);
+                if (data.video_url) {
+                    lines.push(`Video URL: ${data.video_url}`);
+                } else {
+                    lines.push(`No video URL found in HTML`);
+                }
+                el.style.color = '#7d7';
+            } else {
+                lines.push(`FAIL — ${data.error || 'Status ' + data.status}`);
+                el.style.color = '#d77';
+            }
+            el.textContent = lines.join('\n');
+        })
+        .catch(e => {
+            el.textContent = 'Error: ' + e;
+            el.style.color = '#d77';
+        });
+}
+
+function inspectHtml() {
+    const url = document.getElementById('test-url-input').value.trim();
+    const el = document.getElementById('test-url-result');
+    if (!url) { el.textContent = 'Enter a URL'; el.style.display = 'block'; return; }
+    el.textContent = 'Fetching HTML...';
+    el.style.display = 'block';
+    fetch('/LeanTube/api/debug-html?url=' + encodeURIComponent(url))
+        .then(r => r.json())
+        .then(data => {
+            el.style.color = '#ccc';
+            let lines = [`Status ${data.status} (${data.content_type})`];
+            lines.push(`HTML length: ${data.html_length} chars`);
+            if (data.video_url) {
+                lines.push(`Video URL: ${data.video_url}`);
+            }
+            lines.push('--- HTML (first 3000 chars) ---');
+            lines.push(data.html.slice(0, 3000));
+            el.textContent = lines.join('\n');
+        })
+        .catch(e => {
+            el.textContent = 'Error: ' + e;
+            el.style.color = '#d77';
+        });
+}
+
+fetchStatus();
+</script>
+{% endblock %}

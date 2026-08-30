@@ -1,0 +1,821 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>LeanAI — {{ character.name }}</title>
+  <link rel="stylesheet" href="/LeanAI/static/leanai.css">
+</head>
+<body class="chat-page" data-streaming="{{ settings.streaming }}" data-stream-speed="{{ settings.stream_speed }}">
+
+  <div class="chat-header">
+    <a href="/LeanAI" class="back">←</a>
+    <div class="char-avatar-sm">
+      {% if character.avatar_path %}
+        <img src="/LeanAI/static/avatars/{{ character.avatar_path }}" alt="">
+      {% else %}
+        {{ character.name[:1] }}
+      {% endif %}
+    </div>
+    <div class="char-name">{{ character.name }}</div>
+    <div class="hamburger-wrap">
+      <button class="hamburger-btn" onclick="toggleHamburger(event)" title="Menu">☰</button>
+      <div class="hamburger-menu" id="hamburger-menu">
+        <button onclick="closeHamburger(); togglePanel('memories')"><span class="hm-icon">🧠</span> Memories</button>
+        <button onclick="closeHamburger(); togglePanel('misc')"><span class="hm-icon">📍</span> Info</button>
+        <button onclick="closeHamburger(); togglePanel('npcs')"><span class="hm-icon">👤</span> NPCs</button>
+        <div class="hamburger-divider"></div>
+        <button onclick="closeHamburger(); scanNow()"><span class="hm-icon">🔍</span> Scan memories</button>
+        <button onclick="closeHamburger(); clearChat()"><span class="hm-icon">🗑</span> Clear conversation</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="messages" id="messages">
+    {% if greeting_shown %}
+    <div class="msg-row" data-id="0" data-role="assistant" data-content="{{ greeting_shown | e | replace('\n', ' ') | replace('\r', ' ') }}">
+      <div class="msg-avatar">
+        {% if character.avatar_path %}
+          <img src="/LeanAI/static/avatars/{{ character.avatar_path }}" alt="">
+        {% else %}
+          {{ character.name[:1] }}
+        {% endif %}
+      </div>
+      <div class="msg-bubble">{{ greeting_shown }}</div>
+    </div>
+    {% endif %}
+
+    {% for m in messages %}
+    {% if not (loop.first and greeting_shown and m.role == 'assistant' and m.content == greeting_shown) %}
+    {% set is_npc = m.role == 'assistant' and m.speaker and m.speaker != '' %}
+    <div class="msg-row {{ 'user' if m.role == 'user' else 'npc' if is_npc else '' }}" data-id="{{ m.id }}" data-role="{{ m.role }}" data-content="{{ m.content | e | replace('\n', ' ') | replace('\r', ' ') }}"{% if m.speaker %} data-speaker="{{ m.speaker }}"{% endif %}>
+      <div class="msg-avatar">
+        {% if m.role == 'user' %}
+          {% if user.avatar_path %}<img src="/LeanAI/static/avatars/{{ user.avatar_path }}" alt="">{% else %}{{ user.name[:1] or 'U' }}{% endif %}
+        {% elif is_npc %}
+          {{ m.speaker[:1] }}
+        {% else %}
+          {% if character.avatar_path %}<img src="/LeanAI/static/avatars/{{ character.avatar_path }}" alt="">{% else %}{{ character.name[:1] }}{% endif %}
+        {% endif %}
+      </div>
+      <div class="msg-bubble">
+        {%- if is_npc %}<div class="npc-badge">{{ m.speaker }}</div>{% endif -%}
+        {{- m.content -}}
+        {%- if m.file_path %}
+          <a href="/LeanAI/static/uploads/{{ m.file_path }}" class="msg-file" target="_blank">
+            {% if m.file_path.rsplit('.',1)[1]|lower in ('png','jpg','jpeg','gif','webp') %}
+              <img src="/LeanAI/static/uploads/{{ m.file_path }}" alt="attachment">
+            {% else %}
+              📎 {{ m.file_path.split('/')[-1] }}
+            {% endif %}
+          </a>
+        {% endif -%}
+      </div>
+    </div>
+    {% endif %}
+    {% endfor %}
+
+    <div class="typing" id="typing">
+      <div class="msg-avatar">
+        {% if character.avatar_path %}
+          <img src="/LeanAI/static/avatars/{{ character.avatar_path }}" alt="">
+        {% else %}
+          {{ character.name[:1] }}
+        {% endif %}
+      </div>
+      <div class="msg-bubble">
+        <span class="dot"></span>
+        <span class="dot"></span>
+        <span class="dot"></span>
+      </div>
+    </div>
+  </div>
+
+  <div class="context-menu" id="context-menu">
+    <button onclick="copyMessage()"><span class="cm-icon">📋</span> Copy</button>
+    <button onclick="editMessage()"><span class="cm-icon">✏️</span> Edit</button>
+    <button id="menu-regenerate" onclick="regenerateMessage()"><span class="cm-icon">🔄</span> Regenerate</button>
+    <button id="menu-resend" onclick="resendMessage()"><span class="cm-icon">↻</span> Resend</button>
+    <button onclick="deleteMessage()" class="cm-danger"><span class="cm-icon">🗑</span> Delete</button>
+  </div>
+
+  <div id="toast"></div>
+
+  <div class="panel-backdrop" id="panel-backdrop" onclick="closePanels()"></div>
+
+  <div class="side-panel" id="panel-memories">
+    <div class="panel-header">
+      <h2>🧠 Memories</h2>
+      <button class="panel-close" onclick="closePanels()">✕</button>
+    </div>
+    <div class="panel-body" id="memories-body"></div>
+    <div class="panel-footer" style="padding:12px;border-top:1px solid rgba(180,100,255,0.08)">
+      <button class="btn btn-secondary btn-sm" onclick="clearMemories()" style="width:100%">🗑 Clear all memories</button>
+    </div>
+  </div>
+
+  <div class="side-panel" id="panel-misc">
+    <div class="panel-header">
+      <h2>📍 Misc</h2>
+      <button class="panel-close" onclick="closePanels()">✕</button>
+    </div>
+    <div class="panel-body" id="misc-body"></div>
+  </div>
+
+  <div class="side-panel" id="panel-npcs">
+    <div class="panel-header">
+      <h2>👤 NPCs</h2>
+      <button class="panel-close" onclick="closePanels()">✕</button>
+    </div>
+    <div class="panel-body" id="npcs-body"></div>
+  </div>
+
+  <form class="chat-input-wrap" id="chat-form" onsubmit="sendMessage(event)">
+    <input type="file" id="file-input" accept=".txt,.md,.csv,.png,.jpg,.jpeg,.gif,.webp" style="display:none">
+    <button type="button" class="btn-icon btn-attach" onclick="document.getElementById('file-input').click()" title="Attach file">📎</button>
+    <textarea id="msg-input" rows="1" placeholder="Message {{ character.name }}..." onkeydown="if(event.key=='Enter'&&!event.shiftKey){event.preventDefault();sendMessage(event)}" oninput="autoResize(this)" autofocus></textarea>
+    <button type="submit" class="btn-icon" id="send-btn" title="Send">➤</button>
+  </form>
+
+  <script>
+    var charId = {{ character.id }};
+    var messagesEl = document.getElementById('messages');
+    var typingEl = document.getElementById('typing');
+    var inputEl = document.getElementById('msg-input');
+    var sendBtn = document.getElementById('send-btn');
+    var fileInput = document.getElementById('file-input');
+    var sending = false;
+    var ctxTarget = null;
+    var streaming = document.body.dataset.streaming === '1';
+    var streamSpeed = parseInt(document.body.dataset.streamSpeed) || 0;
+
+    function scrollBottom() {
+      messagesEl.scrollTop = messagesEl.scrollHeight;
+    }
+    scrollBottom();
+    if (inputEl.value) autoResize(inputEl);
+
+    // ─── Mobile viewport height fix ───
+
+    function setVh() {
+      document.documentElement.style.setProperty('--vh', (window.innerHeight * 0.01) + 'px');
+    }
+    setVh();
+    window.addEventListener('resize', setVh);
+    window.addEventListener('orientationchange', function() { setTimeout(setVh, 100); });
+
+    // ─── Long-press / right-click ───
+
+    messagesEl.addEventListener('touchstart', function(e) {
+      var row = e.target.closest('.msg-row');
+      if (!row || row.dataset.id == '0' ) return;
+      ctxTarget = row;
+      window._lpTimer = setTimeout(function() {
+        window._lpFired = true;
+        showCtx(e, row);
+      }, 500);
+    }, {passive: true});
+
+    messagesEl.addEventListener('touchend', function() {
+      clearTimeout(window._lpTimer);
+    }, {passive: true});
+
+    messagesEl.addEventListener('touchmove', function() {
+      clearTimeout(window._lpTimer);
+    }, {passive: true});
+
+    messagesEl.addEventListener('contextmenu', function(e) {
+      var row = e.target.closest('.msg-row');
+      if (!row || row.dataset.id == '0') return;
+      e.preventDefault();
+      ctxTarget = row;
+      showCtx(e, row);
+    });
+
+    document.addEventListener('click', function(e) {
+      if (!e.target.closest('.context-menu')) {
+        hideCtx();
+      }
+    });
+
+    // ─── Context menu ───
+
+    function showCtx(e, row) {
+      var menu = document.getElementById('context-menu');
+      var role = row.dataset.role;
+      document.getElementById('menu-regenerate').style.display = role === 'assistant' ? '' : 'none';
+      document.getElementById('menu-resend').style.display = role === 'user' ? '' : 'none';
+      if (window.innerWidth > 480) {
+        var x = (e.touches ? e.touches[0].clientX : e.clientX) + 4;
+        var y = (e.touches ? e.touches[0].clientY : e.clientY) + 4;
+        var maxX = window.innerWidth - menu.offsetWidth - 8;
+        var maxY = window.innerHeight - menu.offsetHeight - 8;
+        menu.style.left = Math.min(x, maxX) + 'px';
+        menu.style.top = Math.min(y, maxY) + 'px';
+      } else {
+        menu.style.left = '';
+        menu.style.top = '';
+      }
+      menu.classList.add('open');
+    }
+
+    function hideCtx() {
+      document.getElementById('context-menu').classList.remove('open');
+    }
+
+    function targetMsg() {
+      if (!ctxTarget) return null;
+      return {
+        id: parseInt(ctxTarget.dataset.id),
+        role: ctxTarget.dataset.role,
+        content: ctxTarget.dataset.content,
+        el: ctxTarget,
+      };
+    }
+
+    // ─── Copy ───
+
+    function copyMessage() {
+      var t = targetMsg();
+      if (!t) return;
+      var text = t.content;
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).catch(function() { fallbackCopy(text); });
+      } else {
+        fallbackCopy(text);
+      }
+      hideCtx();
+    }
+
+    function fallbackCopy(text) {
+      var ta = document.createElement('textarea');
+      ta.value = text;
+      ta.style.position = 'fixed';
+      ta.style.opacity = '0';
+      document.body.appendChild(ta);
+      ta.select();
+      try { document.execCommand('copy'); } catch(e) {}
+      document.body.removeChild(ta);
+    }
+
+    // ─── Edit ───
+
+    function editMessage() {
+      var t = targetMsg();
+      if (!t) return;
+      hideCtx();
+      var bubble = t.el.querySelector('.msg-bubble');
+      var text = t.content;
+      bubble.innerHTML = '<textarea class="edit-input" id="edit-ta">' + escHtml(text) + '</textarea>'
+        + '<div class="edit-actions">'
+        + '<button class="btn btn-primary btn-sm" onclick="saveEdit(this)">Save</button>'
+        + '<button class="btn btn-secondary btn-sm" onclick="cancelEdit(this)">Cancel</button>'
+        + '</div>';
+      bubble.querySelector('.edit-input').focus();
+    }
+
+    function saveEdit(btn) {
+      var bubble = btn.closest('.msg-bubble');
+      var ta = bubble.querySelector('.edit-input');
+      var content = ta.value.trim();
+      if (!content) return;
+      var row = btn.closest('.msg-row');
+      var msgId = parseInt(row.dataset.id);
+      fetch('/LeanAI/characters/' + charId + '/chat/edit', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({message_id: msgId, content: content}),
+      }).then(function(r) { return r.json(); }).then(function(data) {
+        if (data.ok) {
+          row.dataset.content = content;
+          bubble.innerHTML = escHtml(content);
+        }
+      });
+    }
+
+    function cancelEdit(btn) {
+      var bubble = btn.closest('.msg-bubble');
+      var row = btn.closest('.msg-row');
+      bubble.textContent = row.dataset.content;
+    }
+
+    // ─── Regenerate ───
+
+    function regenerateMessage() {
+      var t = targetMsg();
+      if (!t || t.role !== 'assistant') return;
+      hideCtx();
+      if (streaming) {
+        removeMessagesFrom(t.id);
+        streamChat('regenerate', {message_id: t.id});
+      } else {
+        doRegenResend('/LeanAI/characters/' + charId + '/chat/regenerate', t.id);
+      }
+    }
+
+    // ─── Resend ───
+
+    function resendMessage() {
+      var t = targetMsg();
+      if (!t || t.role !== 'user') return;
+      hideCtx();
+      if (streaming) {
+        removeMessagesFrom(t.id);
+        streamChat('resend', {message_id: t.id});
+      } else {
+        doRegenResend('/LeanAI/characters/' + charId + '/chat/resend', t.id);
+      }
+    }
+
+    function removeMessagesFrom(msgId) {
+      var rows = messagesEl.querySelectorAll('.msg-row');
+      var removed = false;
+      rows.forEach(function(r) {
+        var id = parseInt(r.dataset.id);
+        if (!removed && id >= msgId && id > 0) {
+          removed = true;
+        }
+        if (removed && id > 0) {
+          r.remove();
+        }
+      });
+    }
+
+    async function doRegenResend(url, msgId) {
+      if (sending) return;
+      sending = true;
+
+      removeMessagesFrom(msgId);
+
+      typingEl.classList.add('show');
+      scrollBottom();
+
+      try {
+        var resp = await fetch(url, {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({message_id: msgId}),
+        });
+        var data = await resp.json();
+        typingEl.classList.remove('show');
+        if (data.error) {
+          appendMsg('assistant', '*Error: ' + data.error + '*');
+        } else {
+          if (data.user_content) {
+            appendMsg('user', data.user_content);
+          }
+          if (data.messages) {
+            data.messages.forEach(function(msg) {
+              appendMsg('assistant', msg.content, null, msg.speaker || '');
+            });
+          } else if (data.reply) {
+            appendMsg('assistant', data.reply);
+          }
+          callExtract();
+        }
+      } catch (err) {
+        typingEl.classList.remove('show');
+        appendMsg('assistant', '*Connection error*');
+      }
+
+      sending = false;
+      scrollBottom();
+    }
+
+    // ─── Delete ───
+
+    function deleteMessage() {
+      var t = targetMsg();
+      if (!t) return;
+      hideCtx();
+      fetch('/LeanAI/characters/' + charId + '/chat/delete', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({message_id: t.id}),
+      }).then(function(r) { return r.json(); }).then(function(data) {
+        if (data.ok) t.el.remove();
+      });
+    }
+
+    // ─── Send message ───
+
+    async function sendMessage(e) {
+      e.preventDefault();
+      var text = inputEl.value.trim();
+      var file = fileInput.files[0];
+      if (!text && !file) return;
+      if (sending) return;
+
+      var formData = new FormData();
+      if (text) formData.append('message', text);
+      if (file) formData.append('file', file);
+
+      var tmpContent = text || '[File: ' + file.name + ']';
+      var tmpRow = appendMsg('user', tmpContent, file);
+      inputEl.value = '';
+      inputEl.style.height = 'auto';
+      fileInput.value = '';
+      scrollBottom();
+
+      if (streaming) {
+        await streamChat('send', formData, tmpRow, tmpContent);
+      } else {
+        await nonStreamSend(formData, tmpRow, tmpContent);
+      }
+
+      sendBtn.disabled = false;
+      inputEl.focus();
+      scrollBottom();
+    }
+
+    async function nonStreamSend(formData, tmpRow, tmpContent) {
+      sending = true;
+      sendBtn.disabled = true;
+      typingEl.classList.add('show');
+      scrollBottom();
+
+      try {
+        var resp = await fetch('/LeanAI/characters/' + charId + '/chat/send', {
+          method: 'POST',
+          body: formData,
+        });
+        var data = await resp.json();
+        typingEl.classList.remove('show');
+        if (data.error) {
+          appendMsg('assistant', '*Error: ' + data.error + '*');
+        } else {
+          if (tmpRow) tmpRow.dataset.content = tmpContent;
+          if (data.messages) {
+            data.messages.forEach(function(msg) {
+              appendMsg('assistant', msg.content, null, msg.speaker || '');
+            });
+          } else if (data.reply) {
+            appendMsg('assistant', data.reply);
+          }
+          callExtract();
+        }
+      } catch (err) {
+        typingEl.classList.remove('show');
+        appendMsg('assistant', '*Connection error*');
+      }
+
+      sending = false;
+    }
+
+    async function streamChat(mode, data, tmpRow, tmpContent) {
+      sending = true;
+      sendBtn.disabled = true;
+      typingEl.classList.add('show');
+      scrollBottom();
+
+      var formData;
+      if (data instanceof FormData) {
+        formData = data;
+        formData.append('mode', mode);
+      } else {
+        formData = new FormData();
+        formData.append('mode', mode);
+        if (data && data.message_id) formData.append('message_id', data.message_id);
+      }
+
+      var streamRow = null;
+      var streamBubble = null;
+      var fullText = '';
+
+      try {
+        var resp = await fetch('/LeanAI/characters/' + charId + '/chat/stream', {
+          method: 'POST',
+          body: formData,
+        });
+
+        if (!resp.ok) {
+          typingEl.classList.remove('show');
+          appendMsg('assistant', '*Connection error: ' + resp.status + '*');
+          sending = false;
+          return;
+        }
+
+        var reader = resp.body.getReader();
+        var decoder = new TextDecoder();
+        var buffer = '';
+
+        while (true) {
+          var result = await reader.read();
+          if (result.done) break;
+
+          buffer += decoder.decode(result.value, { stream: true });
+          var lines = buffer.split('\n');
+          buffer = lines.pop();
+
+          for (var i = 0; i < lines.length; i++) {
+            var line = lines[i].trim();
+            if (!line.startsWith('data: ')) continue;
+
+            try {
+              var payload = JSON.parse(line.substring(6));
+            } catch (e) { continue; }
+
+            if (payload.type === 'chunk') {
+              typingEl.classList.remove('show');
+              fullText += payload.content;
+
+              if (!streamRow) {
+                streamRow = appendMsg('assistant', fullText);
+                streamBubble = streamRow.querySelector('.msg-bubble');
+              } else {
+                streamBubble.textContent = fullText;
+              }
+              scrollBottom();
+
+              if (streamSpeed > 0) {
+                await new Promise(function(r) { setTimeout(r, streamSpeed); });
+              }
+
+            } else if (payload.type === 'done') {
+              if (streamRow) streamRow.remove();
+              if (tmpRow && mode === 'send') tmpRow.dataset.content = tmpContent;
+              if (payload.messages) {
+                payload.messages.forEach(function(msg) {
+                  appendMsg('assistant', msg.content, null, msg.speaker || '');
+                });
+              }
+              callExtract();
+
+            } else if (payload.type === 'error') {
+              if (streamRow) streamRow.remove();
+              appendMsg('assistant', '*Error: ' + payload.error + '*');
+            }
+          }
+        }
+      } catch (err) {
+        if (streamRow) streamRow.remove();
+        typingEl.classList.remove('show');
+        appendMsg('assistant', '*Connection error*');
+      }
+
+      typingEl.classList.remove('show');
+      sending = false;
+    }
+
+    // ─── Append message ───
+
+    function appendMsg(role, content, file, speaker) {
+      var isNpc = role === 'assistant' && speaker && speaker !== '';
+      var row = document.createElement('div');
+      row.className = 'msg-row' + (role === 'user' ? ' user' : '') + (isNpc ? ' npc' : '');
+      row.dataset.role = role;
+      row.dataset.content = content;
+      row.dataset.id = '0';
+      if (speaker) row.dataset.speaker = speaker;
+
+      var avatar = document.createElement('div');
+      avatar.className = 'msg-avatar';
+      if (role === 'user') {
+        avatar.textContent = '{{ user.name[:1] or "U" }}';
+      } else if (isNpc) {
+        avatar.textContent = speaker[0];
+      } else {
+        avatar.textContent = '{{ character.name[:1] }}';
+      }
+      row.appendChild(avatar);
+
+      var bubble = document.createElement('div');
+      bubble.className = 'msg-bubble';
+
+      if (isNpc) {
+        var badge = document.createElement('div');
+        badge.className = 'npc-badge';
+        badge.textContent = speaker;
+        bubble.appendChild(badge);
+      }
+
+      bubble.appendChild(document.createTextNode(content));
+
+      if (file) {
+        var fname = file.name || file;
+        var ext = fname.split('.').pop().toLowerCase();
+        var link = document.createElement('a');
+        link.className = 'msg-file';
+        link.href = '/LeanAI/static/uploads/' + fname;
+        link.target = '_blank';
+        if (['png','jpg','jpeg','gif','webp'].indexOf(ext) !== -1) {
+          var img = document.createElement('img');
+          img.src = link.href;
+          link.appendChild(img);
+        } else {
+          link.textContent = '📎 ' + fname;
+        }
+        bubble.appendChild(link);
+      }
+
+      row.appendChild(bubble);
+      messagesEl.insertBefore(row, typingEl);
+      return row;
+    }
+
+    // ─── File input ───
+
+    fileInput.addEventListener('change', function() {
+      if (this.files[0] && !inputEl.value.trim()) {
+        inputEl.value = '[File: ' + this.files[0].name + ']';
+      }
+    });
+
+    // ─── Clear chat ───
+
+    async function clearChat() {
+      if (!confirm('Clear conversation?')) return;
+      var resp = await fetch('/LeanAI/characters/' + charId + '/chat/clear', { method: 'POST' });
+      if (resp.ok) {
+        var bubbles = messagesEl.querySelectorAll('.msg-row');
+        bubbles.forEach(function(el) { el.remove(); });
+        scrollBottom();
+      }
+    }
+
+    var scanning = false;
+    async function scanNow() {
+      if (scanning) return;
+      scanning = true;
+      try {
+        var resp = await fetch('/LeanAI/characters/' + charId + '/chat/scan', { method: 'POST' });
+        var data = await resp.json();
+        if (data.error) {
+          showToast('Scan failed: ' + data.error);
+        } else if (data.note) {
+          showToast(data.note);
+        } else {
+          var parts = [];
+          if (data.memories) parts.push(data.memories + ' memories');
+          if (data.npcs) parts.push(data.npcs + ' NPCs');
+          showToast('Scan done: ' + (parts.join(', ') || 'nothing new'));
+        }
+        loadMemories();
+        loadState();
+        loadNpcs();
+      } catch (err) {
+        showToast('Scan failed - connection error');
+      } finally {
+        scanning = false;
+      }
+    }
+
+    function showToast(msg) {
+      var el = document.getElementById('toast');
+      el.textContent = msg;
+      el.classList.add('show');
+      clearTimeout(el._timer);
+      el._timer = setTimeout(function() { el.classList.remove('show'); }, 3000);
+    }
+
+    // ─── Side panels ───
+
+    function togglePanel(name) {
+      var backdrop = document.getElementById('panel-backdrop');
+      var panel = document.getElementById('panel-' + name);
+      var open = panel.classList.contains('open');
+      closePanels();
+      if (!open) {
+        backdrop.classList.add('open');
+        panel.classList.add('open');
+        if (name === 'memories') loadMemories();
+        if (name === 'misc') loadState();
+        if (name === 'npcs') loadNpcs();
+      }
+    }
+
+    function closePanels() {
+      document.getElementById('panel-backdrop').classList.remove('open');
+      document.querySelectorAll('.side-panel').forEach(function(p) { p.classList.remove('open'); });
+    }
+
+    function loadMemories() {
+      var body = document.getElementById('memories-body');
+      body.innerHTML = '<p style="color:#605070">Loading...</p>';
+      fetch('/LeanAI/characters/' + charId + '/chat/memories')
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+          if (!data.memories || data.memories.length === 0) {
+            body.innerHTML = '<p>No memories yet.</p>';
+            return;
+          }
+          body.innerHTML = data.memories.map(function(m) {
+            return '<div class="memory-item">' + escHtml(m.content) + '</div>';
+          }).join('');
+        });
+    }
+
+    async function clearMemories() {
+      if (!confirm('Clear all memories for this character?')) return;
+      await fetch('/LeanAI/characters/' + charId + '/chat/memories/clear', { method: 'POST' });
+      loadMemories();
+    }
+
+    function loadState() {
+      var body = document.getElementById('misc-body');
+      body.innerHTML = '<p style="color:#605070">Loading...</p>';
+      fetch('/LeanAI/characters/' + charId + '/chat/state')
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+          var s = data.state || {};
+          body.innerHTML = ''
+            + '<div class="state-field"><div class="label">Location</div>'
+            + '<div class="value">' + escHtml(s.location || 'unknown') + '</div></div>'
+            + '<div class="state-field"><div class="label">Clothes</div>'
+            + '<div class="value">' + escHtml(s.clothes || 'not described') + '</div></div>';
+        });
+    }
+
+    // ─── Auto-resize textarea ───
+
+    function autoResize(ta) {
+      ta.style.height = 'auto';
+      ta.style.height = Math.min(ta.scrollHeight, 160) + 'px';
+    }
+
+    // ─── Extract after reply ───
+
+    function callExtract() {
+      fetch('/LeanAI/characters/' + charId + '/chat/extract', { method: 'POST' }).catch(function(){});
+    }
+
+    // ─── Helper ───
+
+    function escHtml(s) {
+      var d = document.createElement('div');
+      d.textContent = s;
+      return d.innerHTML;
+    }
+
+    // ─── Hamburger menu ───
+
+    function toggleHamburger(e) {
+      e.stopPropagation();
+      var menu = document.getElementById('hamburger-menu');
+      menu.classList.toggle('open');
+    }
+
+    function closeHamburger() {
+      document.getElementById('hamburger-menu').classList.remove('open');
+    }
+
+    document.addEventListener('click', function(e) {
+      if (!e.target.closest('.hamburger-wrap')) {
+        closeHamburger();
+      }
+    });
+
+    // ─── NPC panel ───
+
+    function loadNpcs() {
+      var body = document.getElementById('npcs-body');
+      body.innerHTML = '<p style="color:#605070">Loading...</p>';
+      fetch('/LeanAI/characters/' + charId + '/npcs')
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+          if (!data.npcs || data.npcs.length === 0) {
+            body.innerHTML = '<p>No NPCs detected yet.</p><p style="font-size:12px;color:#605070;margin-top:8px">NPCs are auto-discovered during conversation. Just keep chatting!</p>';
+            return;
+          }
+          body.innerHTML = data.npcs.map(function(n) {
+            return '<div class="npc-item">'
+              + '<div class="npc-item-header">'
+                + '<div class="npc-item-avatar">' + escHtml(n.name[0]) + '</div>'
+                + '<div class="npc-item-info">'
+                  + '<div class="npc-item-name">' + escHtml(n.name) + '</div>'
+                  + (n.relationship ? '<div class="npc-item-rel">' + escHtml(n.relationship) + '</div>' : '')
+                + '</div>'
+                + '<label class="toggle-row npc-toggle">'
+                  + '<input type="checkbox" ' + (n.is_active ? 'checked' : '') + ' onchange="toggleNpc(' + n.id + ', this.checked)">'
+                  + '<div class="toggle-track"><div class="toggle-knob"></div></div>'
+                + '</label>'
+              + '</div>'
+              + (n.personality ? '<div class="npc-item-pers">' + escHtml(n.personality) + '</div>' : '')
+              + '<button class="btn btn-danger btn-sm npc-del-btn" onclick="deleteNpc(' + n.id + ')">Remove</button>'
+            + '</div>';
+          }).join('');
+        });
+    }
+
+    function toggleNpc(npcId, active) {
+      fetch('/LeanAI/characters/' + charId + '/npcs/' + npcId + '/toggle', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({is_active: active ? 1 : 0}),
+      }).catch(function(){});
+    }
+
+    function deleteNpc(npcId) {
+      if (!confirm('Remove this NPC?')) return;
+      fetch('/LeanAI/characters/' + charId + '/npcs/' + npcId + '/delete', {
+        method: 'POST',
+      }).then(function(r) { return r.json(); }).then(function(data) {
+        if (data.ok) loadNpcs();
+      });
+    }
+
+
+  </script>
+
+</body>
+</html>

@@ -1,0 +1,5 @@
+{
+  "name": "LeanAI",
+  "description": "AI Assistant",
+  "route": "/LeanAI"
+}

@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>LeanAI — AI Settings</title>
+  <link rel="stylesheet" href="/LeanAI/static/leanai.css">
+</head>
+<body>
+
+  <div class="page-header">
+    <a href="/LeanAI">←</a>
+    <h1>AI Settings</h1>
+  </div>
+
+  {% if msg %}
+    <div style="margin: 12px 24px 0;">
+      <div class="msg msg-success">{{ msg }}</div>
+    </div>
+  {% endif %}
+
+  <form method="POST" action="/LeanAI/settings/ai">
+
+    <div class="section-card">
+      <h2>Generation</h2>
+
+      <div class="slider-row">
+        <label>Context tokens</label>
+        <input type="range" name="context_length" min="512" max="32768" step="512" value="{{ settings.context_length }}" oninput="document.getElementById('ctx-val').textContent=this.value">
+        <span class="slider-value" id="ctx-val">{{ settings.context_length }}</span>
+      </div>
+
+      <div class="slider-row">
+        <label>Temperature</label>
+        <input type="range" name="temperature" min="0" max="2" step="0.01" value="{{ settings.temperature }}" oninput="document.getElementById('temp-val').textContent=parseFloat(this.value).toFixed(2)">
+        <span class="slider-value" id="temp-val">{{ '%.2f'|format(settings.temperature) }}</span>
+      </div>
+
+      <div class="slider-row">
+        <label>Context messages</label>
+        <input type="range" name="context_messages" min="1" max="200" step="1" value="{{ settings.context_messages }}" oninput="document.getElementById('ctx-msg-val').textContent=this.value">
+        <span class="slider-value" id="ctx-msg-val">{{ settings.context_messages }}</span>
+      </div>
+
+      <div class="toggle-row" onclick="var cb=this.querySelector('input[type=checkbox]'); cb.checked=!cb.checked;">
+        <label>Streaming</label>
+        <input type="checkbox" name="streaming" value="1" {{ 'checked' if settings.streaming }}>
+        <div class="toggle-track"><div class="toggle-knob"></div></div>
+        <span style="font-size:11px;color:#504060">Tokens appear in real-time</span>
+      </div>
+
+      <div class="slider-row" style="margin-top:8px">
+        <label>Stream speed</label>
+        <input type="range" name="stream_speed" min="0" max="50" step="1" value="{{ settings.stream_speed }}" oninput="var v=parseInt(this.value);document.getElementById('ss-val').textContent=v?'+'+v+'ms':'Instant'">
+        <span class="slider-value" id="ss-val">{% if settings.stream_speed %}+{{ settings.stream_speed }}ms{% else %}Instant{% endif %}</span>
+      </div>
+    </div>
+
+    <div class="section-card">
+      <h2>System Prompt</h2>
+      <div class="field">
+        <textarea name="system_prompt" placeholder="You are a helpful AI assistant..." style="min-height:200px">{{ display_prompt }}</textarea>
+      </div>
+    </div>
+
+    <div class="section-card">
+      <h2>Memory &amp; State Extraction</h2>
+      <div class="slider-row">
+        <label>Auto-extract every</label>
+        <input type="range" name="auto_extract_interval" min="0" max="50" step="1" value="{{ settings.auto_extract_interval }}" oninput="var v=parseInt(this.value);document.getElementById('ae-val').textContent=v?'Every '+v+' msgs':'Disabled'">
+        <span class="slider-value" id="ae-val">{% if settings.auto_extract_interval %}Every {{ settings.auto_extract_interval }} msgs{% else %}Disabled{% endif %}</span>
+      </div>
+      <p style="color:#504060;font-size:12px;margin-top:8px">Set to <strong>0</strong> to disable. When off, use the <strong>🔍 Scan</strong> button on the dashboard or chat page to manually extract memories and update location/clothes.</p>
+    </div>
+
+    <div class="section-card">
+      <h2>LLM Connection</h2>
+
+      <div class="field">
+        <label>Endpoint</label>
+        <div class="endpoint-row">
+          <input type="text" name="llm_endpoint" value="{{ settings.llm_endpoint }}" placeholder="http://localhost:1234/v1">
+          <button type="button" class="btn btn-secondary" onclick="fetchModels()" style="flex:0 0 auto;padding:10px 14px;font-size:13px">⟳ Fetch</button>
+        </div>
+      </div>
+
+      <div class="field">
+        <label>Model</label>
+        <select name="llm_model" id="model-select">
+          <option value="">— Select model —</option>
+          {% if models %}
+            {% for m in models %}
+              <option value="{{ m.id }}" {{ 'selected' if m.id == settings.llm_model }}>{{ m.id }}</option>
+            {% endfor %}
+          {% endif %}
+        </select>
+      </div>
+    </div>
+
+    <div class="btn-row" style="margin:0 24px">
+      <button type="submit" class="btn btn-primary">Save Settings</button>
+    </div>
+
+  </form>
+
+  <script>
+    async function fetchModels() {
+      var endpoint = document.querySelector('input[name="llm_endpoint"]').value.replace(/\/+$/, '');
+      var sel = document.getElementById('model-select');
+      sel.innerHTML = '<option value="">Loading...</option>';
+
+      try {
+        var resp = await fetch(endpoint + '/models');
+        if (!resp.ok) throw new Error('HTTP ' + resp.status);
+        var data = await resp.json();
+        sel.innerHTML = '<option value="">— Select model —</option>';
+        (data.data || []).forEach(function(m) {
+          var opt = document.createElement('option');
+          opt.value = m.id;
+          opt.textContent = m.id;
+          sel.appendChild(opt);
+        });
+      } catch (err) {
+        sel.innerHTML = '<option value="">Failed to fetch models</option>';
+      }
+    }
+  </script>
+
+</body>
+</html>

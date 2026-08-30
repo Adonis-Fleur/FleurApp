@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>LeanAI — Profile</title>
+  <link rel="stylesheet" href="/LeanAI/static/leanai.css">
+</head>
+<body>
+
+  <div class="page-header">
+    <a href="/LeanAI">←</a>
+    <h1>Profile</h1>
+  </div>
+
+  {% if msg %}
+    <div style="margin: 12px 24px 0;">
+      <div class="msg msg-success">{{ msg }}</div>
+    </div>
+  {% endif %}
+
+  <form method="POST" action="/LeanAI/profile">
+    <div class="section-card">
+
+      <div class="avatar-wrap">
+        <label class="avatar-circle" onclick="document.getElementById('avatar-input').click()">
+          {% if user.avatar_path %}
+            <img src="/LeanAI/static/avatars/{{ user.avatar_path }}" alt="avatar">
+          {% else %}
+            {{ user.name[:1] or '?' }}
+          {% endif %}
+        </label>
+        <form method="POST" action="/LeanAI/avatar" enctype="multipart/form-data" id="avatar-form">
+          <input type="file" id="avatar-input" name="avatar" accept="image/*" onchange="document.getElementById('avatar-form').submit()" style="display:none">
+        </form>
+      </div>
+
+      <div class="field">
+        <label for="name">Name</label>
+        <input type="text" id="name" name="name" value="{{ user.name }}" placeholder="Your name" maxlength="60">
+      </div>
+
+      <div class="field">
+        <label for="description">Description</label>
+        <textarea id="description" name="description" placeholder="About you" maxlength="200">{{ user.description }}</textarea>
+      </div>
+
+      <div class="btn-row">
+        <button type="submit" class="btn btn-primary">Save</button>
+      </div>
+    </div>
+  </form>
+
+  <div class="section-card">
+    <h2>Presets</h2>
+
+    <form method="POST" action="/LeanAI/presets/save">
+      <input type="hidden" name="name" id="preset-name-hidden">
+      <input type="hidden" name="description" id="preset-desc-hidden">
+      <div class="field">
+        <label for="preset-label">Save current name + description as preset</label>
+        <div class="preset-save-row">
+          <input type="text" id="preset-label" name="label" placeholder="Preset label" maxlength="60">
+          <button type="submit" class="btn btn-primary" onclick="document.getElementById('preset-name-hidden').value=document.getElementById('name').value;document.getElementById('preset-desc-hidden').value=document.getElementById('description').value">Save</button>
+        </div>
+      </div>
+    </form>
+
+    {% if presets %}
+      <div class="field">
+        <label for="preset-select">Load a preset</label>
+        <div class="preset-row">
+          <select id="preset-select">
+            <option value="">— Select —</option>
+            {% for p in presets %}
+              <option value="{{ p.id }}" data-name="{{ p.name }}" data-desc="{{ p.description }}">{{ p.label }}</option>
+            {% endfor %}
+          </select>
+          <button class="btn btn-secondary" onclick="loadPreset()">Load</button>
+        </div>
+      </div>
+      <div style="margin-top:8px;display:flex;flex-wrap:wrap;gap:6px">
+        {% for p in presets %}
+          <form method="POST" action="/LeanAI/presets/{{ p.id }}/delete" style="display:inline">
+            <button class="btn btn-sm btn-danger" style="padding:6px 10px;font-size:11px" onclick="return confirm('Delete preset «{{ p.label }}»?')">{{ p.label }} ×</button>
+          </form>
+        {% endfor %}
+      </div>
+    {% else %}
+      <p style="color:#504060;font-size:13px;margin-top:4px">No presets yet.</p>
+    {% endif %}
+  </div>
+
+  <script>
+    function loadPreset() {
+      var sel = document.getElementById('preset-select');
+      var opt = sel.options[sel.selectedIndex];
+      if (opt && opt.value) {
+        document.getElementById('name').value = opt.dataset.name;
+        document.getElementById('description').value = opt.dataset.desc;
+      }
+    }
+  </script>
+
+</body>
+</html>

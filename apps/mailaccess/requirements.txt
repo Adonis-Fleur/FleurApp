@@ -1,0 +1,3 @@
+mailaccess>=0.14
+httpx>=0.27
+uvicorn>=0.29

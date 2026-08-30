@@ -1,0 +1,540 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>LeanAI — Image Gen</title>
+  <link rel="stylesheet" href="/LeanAI/static/leanai.css">
+  <style>
+    .gen-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin:0 24px 24px}
+    .gen-grid .section-card{margin:0}
+    @media(max-width:700px){.gen-grid{grid-template-columns:1fr}}
+    .gallery{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:12px;margin:0 24px 24px}
+    .gallery-item{position:relative;border-radius:10px;overflow:hidden;background:#1a1028;cursor:pointer;border:1px solid #2a1a3a;transition:border-color .2s}
+    .gallery-item:hover{border-color:#b428ff}
+    .gallery-item img{width:100%;aspect-ratio:1;object-fit:cover;display:block}
+    .gallery-item .meta{padding:8px 10px;font-size:11px;color:#a090b8;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .gallery-item .del-btn{position:absolute;top:6px;right:6px;width:28px;height:28px;border-radius:50%;background:rgba(0,0,0,.7);color:#ff4466;border:none;cursor:pointer;font-size:14px;display:none;align-items:center;justify-content:center;line-height:1}
+    .gallery-item:hover .del-btn{display:flex}
+    .opt-select{width:100%;padding:10px 12px;background:#1a1028;border:1px solid #3a2a4a;border-radius:8px;color:#e0d0f0;font-size:14px}
+    .opt-select option{background:#1a1028}
+    .preview-overlay{position:fixed;inset:0;background:rgba(0,0,0,.85);z-index:1000;display:none;align-items:center;justify-content:center;flex-direction:column;gap:12px}
+    .preview-overlay.open{display:flex}
+    .preview-overlay img{max-width:90vw;max-height:80vh;border-radius:10px;object-fit:contain}
+    .preview-overlay .close-btn{position:absolute;top:16px;right:24px;font-size:28px;color:#fff;background:none;border:none;cursor:pointer}
+    .preview-overlay .prompt-text{color:#a090b8;font-size:13px;max-width:600px;text-align:center;padding:0 16px}
+    .spinner{display:none;width:18px;height:18px;border:2px solid #fff4;border-top-color:#fff;border-radius:50%;animation:spin .6s linear infinite;margin-right:8px}
+    @keyframes spin{to{transform:rotate(360deg)}}
+    .btn-generating .spinner{display:inline-block}
+    .btn-generating{opacity:.7;pointer-events:none}
+    .error-msg{color:#ff4466;font-size:13px;margin:0 24px 8px;display:none}
+    .toggle-row{display:flex;align-items:center;gap:10px;margin:8px 0}
+    .toggle-row label{font-size:13px;color:#a090b8;cursor:pointer;user-select:none}
+    .toggle{position:relative;width:36px;height:20px;flex-shrink:0}
+    .toggle input{opacity:0;width:0;height:0}
+    .toggle .slider{position:absolute;inset:0;background:#2a1a3a;border-radius:20px;cursor:pointer;transition:.2s}
+    .toggle .slider:before{content:'';position:absolute;width:14px;height:14px;left:3px;bottom:3px;background:#666;border-radius:50%;transition:.2s}
+    .toggle input:checked+.slider{background:#b428ff}
+    .toggle input:checked+.slider:before{transform:translateX(16px);background:#fff}
+    .model-badge{display:inline-block;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:600;margin-left:8px;vertical-align:middle}
+    .badge-sdxl{background:#b428ff22;color:#d4a0ff;border:1px solid #b428ff44}
+    .badge-sd15{background:#2a6aff22;color:#80b0ff;border:1px solid #2a6aff44}
+    .lora-section{margin-top:12px;border-top:1px solid #2a1a3a;padding-top:12px}
+    .lora-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
+    .lora-header h3{margin:0;font-size:13px;color:#a090b8}
+    .lora-add-btn{background:none;border:1px solid #3a2a4a;color:#b428ff;padding:4px 12px;border-radius:6px;font-size:12px;cursor:pointer;transition:.2s}
+    .lora-add-btn:hover{background:#b428ff22;border-color:#b428ff}
+    .lora-row{display:grid;grid-template-columns:1fr 80px 80px 28px;gap:6px;align-items:center;margin-bottom:6px}
+    .lora-row .opt-select{font-size:12px;padding:6px 8px}
+    .lora-row input[type=number]{width:100%;padding:6px 8px;background:#1a1028;border:1px solid #3a2a4a;border-radius:6px;color:#e0d0f0;font-size:12px;text-align:center}
+    .lora-rm-btn{width:28px;height:28px;border-radius:50%;background:#ff446622;color:#ff4466;border:none;cursor:pointer;font-size:14px;display:flex;align-items:center;justify-content:center;transition:.2s}
+    .lora-rm-btn:hover{background:#ff446644}
+    .lora-empty{font-size:12px;color:#504060;font-style:italic}
+    .gen-status{margin:0 24px 16px;display:none}
+    .gen-status.active{display:block}
+    .gen-progress{height:4px;background:#1a1028;border-radius:4px;overflow:hidden;margin-bottom:8px}
+    .gen-progress-bar{height:100%;background:linear-gradient(90deg,#b428ff,#ff6ab4);width:0%;transition:width .3s;border-radius:4px}
+    .gen-progress-bar.indeterminate{width:100%;animation:indeterminate 1.5s ease-in-out infinite;background-size:200% 100%;background-image:linear-gradient(90deg,#b428ff 0%,#ff6ab4 50%,#b428ff 100%)}
+    @keyframes indeterminate{0%{background-position:200% 0}100%{background-position:-200% 0}}
+    .gen-info{display:flex;align-items:center;gap:12px;font-size:13px;color:#a090b8}
+    .gen-timer{font-variant-numeric:tabular-nums;font-weight:600;color:#e0d0f0;min-width:50px}
+    .gen-queue{color:#8060a0}
+    .gen-failed{background:#ff446615;border:1px solid #ff446633;border-radius:8px;padding:12px 16px;margin:0 24px 16px;display:none}
+    .gen-failed.active{display:flex;align-items:center;gap:12px}
+    .gen-failed .icon{font-size:20px;flex-shrink:0}
+    .gen-failed .msg{flex:1;font-size:13px;color:#ff8899}
+    .gen-failed .retry-btn{background:#ff446622;border:1px solid #ff446644;color:#ff6688;padding:6px 14px;border-radius:6px;font-size:12px;cursor:pointer;transition:.2s;white-space:nowrap}
+    .gen-failed .retry-btn:hover{background:#ff446644}
+  </style>
+</head>
+<body>
+
+  <div class="page-header">
+    <a href="/LeanAI">←</a>
+    <h1>✧ Image Gen</h1>
+  </div>
+
+  <div class="gen-grid">
+    <div class="section-card">
+      <h2>Prompt</h2>
+      <div class="field">
+        <textarea id="prompt" placeholder="Describe the image you want to generate..." style="min-height:100px"></textarea>
+      </div>
+      <div class="field">
+        <label>Negative prompt</label>
+        <textarea id="negative" style="min-height:60px">worst quality, low quality, blurry, deformed, ugly, bad anatomy, bad hands, extra fingers, missing fingers</textarea>
+      </div>
+      <div class="field">
+        <label>Model <span id="model-badge"></span></label>
+        <select id="model-select" class="opt-select">
+          <option value="">Loading models...</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>VAE <span style="font-size:11px;color:#504060">(empty = model default)</span></label>
+        <select id="vae-select" class="opt-select">
+          <option value="">Model default</option>
+        </select>
+      </div>
+      <div class="lora-section">
+        <div class="lora-header">
+          <h3>LoRAs</h3>
+          <button class="lora-add-btn" onclick="addLora()">+ Add</button>
+        </div>
+        <div id="lora-list">
+          <div class="lora-empty">No LoRAs added</div>
+        </div>
+      </div>
+      <div class="toggle-row">
+        <label class="toggle"><input type="checkbox" id="quality-boost" checked><span class="slider"></span></label>
+        <label for="quality-boost">Quality boost (masterpiece, best quality, highly detailed)</label>
+      </div>
+      <div class="toggle-row">
+        <label class="toggle"><input type="checkbox" id="hires-fix"><span class="slider"></span></label>
+        <label for="hires-fix">Hires fix (2x latent upscale + denoise pass)</label>
+      </div>
+    </div>
+
+    <div class="section-card">
+      <h2>Settings</h2>
+
+      <div class="slider-row">
+        <label>Steps</label>
+        <input type="range" id="steps" min="1" max="80" value="28" oninput="document.getElementById('steps-val').textContent=this.value">
+        <span class="slider-value" id="steps-val">28</span>
+      </div>
+
+      <div class="slider-row">
+        <label>CFG</label>
+        <input type="range" id="cfg" min="1" max="30" value="7" oninput="document.getElementById('cfg-val').textContent=this.value">
+        <span class="slider-value" id="cfg-val">7</span>
+      </div>
+
+      <div class="slider-row">
+        <label>Width</label>
+        <input type="range" id="width" min="256" max="2048" step="64" value="1024" oninput="document.getElementById('width-val').textContent=this.value">
+        <span class="slider-value" id="width-val">1024</span>
+      </div>
+
+      <div class="slider-row">
+        <label>Height</label>
+        <input type="range" id="height" min="256" max="2048" step="64" value="1024" oninput="document.getElementById('height-val').textContent=this.value">
+        <span class="slider-value" id="height-val">1024</span>
+      </div>
+
+      <div class="slider-row">
+        <label>Seed</label>
+        <input type="number" id="seed" value="-1" style="width:100px;background:#1a1028;border:1px solid #3a2a4a;border-radius:6px;padding:6px 10px;color:#e0d0f0;font-size:13px">
+        <span style="font-size:12px;color:#504060;margin-left:6px">-1 = random</span>
+      </div>
+
+      <div class="field" style="margin-top:8px">
+        <label>Sampler</label>
+        <select id="sampler" class="opt-select">
+          <option value="dpmpp_2m_sde" selected>dpmpp_2m_sde</option>
+          <option value="dpmpp_2m">dpmpp_2m</option>
+          <option value="dpmpp_3m_sde">dpmpp_3m_sde</option>
+          <option value="dpmpp_sde">dpmpp_sde</option>
+          <option value="euler_ancestral">euler_a</option>
+          <option value="euler">euler</option>
+          <option value="ddim">ddim</option>
+          <option value="uni_pc">uni_pc</option>
+        </select>
+      </div>
+
+      <div class="field" style="margin-top:8px">
+        <label>Scheduler</label>
+        <select id="scheduler" class="opt-select">
+          <option value="karras" selected>karras</option>
+          <option value="exponential">exponential</option>
+          <option value="normal">normal</option>
+          <option value="simple">simple</option>
+          <option value="sgm_uniform">sgm_uniform</option>
+          <option value="ddim_uniform">ddim_uniform</option>
+          <option value="beta">beta</option>
+        </select>
+      </div>
+    </div>
+  </div>
+
+  <div class="error-msg" id="error-msg"></div>
+
+  <div class="btn-row" style="margin:0 24px 24px">
+    <button class="btn btn-primary" id="gen-btn" onclick="generate()">
+      <span class="spinner"></span>Generate
+    </button>
+  </div>
+
+  <div class="gen-status" id="gen-status">
+    <div class="gen-progress"><div class="gen-progress-bar indeterminate" id="gen-progress-bar"></div></div>
+    <div class="gen-info">
+      <span class="gen-timer" id="gen-timer">0.0s</span>
+      <span class="gen-queue" id="gen-queue"></span>
+    </div>
+  </div>
+
+  <div class="gen-failed" id="gen-failed">
+    <span class="icon">⚠</span>
+    <span class="msg" id="gen-failed-msg">Generation failed</span>
+    <button class="retry-btn" onclick="retryGenerate()">Retry</button>
+  </div>
+
+  {% if history %}
+  <h2 style="margin:0 24px 12px;color:#a090b8;font-size:14px">History</h2>
+  <div class="gallery" id="gallery">
+    {% for img in history %}
+    <div class="gallery-item" onclick="preview('{{ img.image_path }}', '{{ img.prompt | e }}')">
+      <img src="/LeanAI/static/uploads/{{ img.image_path }}" loading="lazy" alt="">
+      <div class="meta">{{ img.prompt[:60] }}</div>
+      <button class="del-btn" onclick="event.stopPropagation();deleteImage({{ img.id }},this.parentElement)" title="Delete">✕</button>
+    </div>
+    {% endfor %}
+  </div>
+  {% else %}
+  <div class="empty-state" id="gallery-empty">
+    <div style="font-size:40px">✧</div>
+    <p>No images generated yet</p>
+  </div>
+  <div class="gallery" id="gallery"></div>
+  {% endif %}
+
+  <div class="preview-overlay" id="preview-overlay" onclick="closePreview()">
+    <button class="close-btn" onclick="closePreview()">✕</button>
+    <img id="preview-img" src="" alt="">
+    <div class="prompt-text" id="preview-prompt"></div>
+  </div>
+
+  <script>
+    var generating = false;
+    var modelInfo = {};
+    var availableLoras = [];
+    var genTimer = null;
+    var genStart = 0;
+    var queuePollTimer = null;
+    var lastPromptBody = null;
+
+    fetch('/LeanAI/image-gen/models')
+      .then(function(r){ return r.json(); })
+      .then(function(d){
+        var sel = document.getElementById('model-select');
+        sel.innerHTML = '';
+        if (!d.models || !d.models.length) {
+          sel.innerHTML = '<option value="">No models found — is ComfyUI running?</option>';
+          return;
+        }
+        modelInfo = d.model_info || {};
+        availableLoras = d.loras || [];
+        d.models.forEach(function(m){
+          var opt = document.createElement('option');
+          opt.value = m;
+          opt.textContent = m;
+          sel.appendChild(opt);
+        });
+        var vaeSel = document.getElementById('vae-select');
+        if (d.vaes && d.vaes.length) {
+          d.vaes.forEach(function(v){
+            var opt = document.createElement('option');
+            opt.value = v;
+            opt.textContent = v;
+            vaeSel.appendChild(opt);
+          });
+        }
+        updateModelBadge();
+      })
+      .catch(function(){
+        document.getElementById('model-select').innerHTML = '<option value="">ComfyUI not reachable</option>';
+      });
+
+    document.getElementById('model-select').addEventListener('change', function(){
+      updateModelBadge();
+      autoSetResolution();
+    });
+
+    function addLora(){
+      if (!availableLoras.length) { showError('No LoRAs installed in ComfyUI'); return; }
+      var list = document.getElementById('lora-list');
+      var empty = list.querySelector('.lora-empty');
+      if (empty) empty.remove();
+
+      var row = document.createElement('div');
+      row.className = 'lora-row';
+
+      var sel = document.createElement('select');
+      sel.className = 'opt-select';
+      availableLoras.forEach(function(l){
+        var opt = document.createElement('option');
+        opt.value = l;
+        opt.textContent = l;
+        sel.appendChild(opt);
+      });
+
+      var smInput = document.createElement('input');
+      smInput.type = 'number';
+      smInput.value = '1.0';
+      smInput.min = '-100';
+      smInput.max = '100';
+      smInput.step = '0.01';
+      smInput.title = 'Model strength';
+
+      var scInput = document.createElement('input');
+      scInput.type = 'number';
+      scInput.value = '1.0';
+      scInput.min = '-100';
+      scInput.max = '100';
+      scInput.step = '0.01';
+      scInput.title = 'CLIP strength';
+
+      var rmBtn = document.createElement('button');
+      rmBtn.className = 'lora-rm-btn';
+      rmBtn.textContent = '✕';
+      rmBtn.onclick = function(){ row.remove(); updateLoraEmpty(); };
+
+      row.appendChild(sel);
+      row.appendChild(smInput);
+      row.appendChild(scInput);
+      row.appendChild(rmBtn);
+      list.appendChild(row);
+    }
+
+    function updateLoraEmpty(){
+      var list = document.getElementById('lora-list');
+      if (!list.children.length) {
+        list.innerHTML = '<div class="lora-empty">No LoRAs added</div>';
+      }
+    }
+
+    function collectLoras(){
+      var rows = document.getElementById('lora-list').querySelectorAll('.lora-row');
+      var loras = [];
+      rows.forEach(function(row){
+        var inputs = row.querySelectorAll('input');
+        loras.push({
+          name: row.querySelector('select').value,
+          strength_model: parseFloat(inputs[0].value) || 1.0,
+          strength_clip: parseFloat(inputs[1].value) || 1.0,
+        });
+      });
+      return loras;
+    }
+
+    function updateModelBadge(){
+      var model = document.getElementById('model-select').value;
+      var badge = document.getElementById('model-badge');
+      if (!model || !modelInfo[model]) { badge.innerHTML = ''; return; }
+      if (modelInfo[model].sdxl) {
+        badge.innerHTML = '<span class="model-badge badge-sdxl">SDXL</span>';
+      } else {
+        badge.innerHTML = '<span class="model-badge badge-sd15">SD 1.5</span>';
+      }
+    }
+
+    function autoSetResolution(){
+      var model = document.getElementById('model-select').value;
+      if (!model || !modelInfo[model]) return;
+      var w = document.getElementById('width');
+      var h = document.getElementById('height');
+      if (modelInfo[model].sdxl) {
+        w.value = 1024; h.value = 1024;
+      } else {
+        w.value = 768; h.value = 768;
+      }
+      document.getElementById('width-val').textContent = w.value;
+      document.getElementById('height-val').textContent = h.value;
+    }
+
+    function startGenTimer(){
+      genStart = Date.now();
+      var timerEl = document.getElementById('gen-timer');
+      genTimer = setInterval(function(){
+        var elapsed = ((Date.now() - genStart) / 1000).toFixed(1);
+        timerEl.textContent = elapsed + 's';
+      }, 100);
+    }
+
+    function stopGenTimer(){
+      if (genTimer) { clearInterval(genTimer); genTimer = null; }
+      if (queuePollTimer) { clearInterval(queuePollTimer); queuePollTimer = null; }
+    }
+
+    function startQueuePoll(){
+      queuePollTimer = setInterval(function(){
+        fetch('/LeanAI/image-gen/queue')
+          .then(function(r){ return r.json(); })
+          .then(function(d){
+            var el = document.getElementById('gen-queue');
+            if (d.queue_depth > 0) {
+              el.textContent = 'Queue: ' + d.queue_depth + ' job' + (d.queue_depth > 1 ? 's' : '');
+            } else if (d.queue_depth === 0) {
+              el.textContent = 'Processing...';
+            } else {
+              el.textContent = '';
+            }
+          })
+          .catch(function(){});
+      }, 2000);
+    }
+
+    function showGenStatus(){
+      document.getElementById('gen-status').classList.add('active');
+      document.getElementById('gen-progress-bar').className = 'gen-progress-bar indeterminate';
+      document.getElementById('gen-failed').classList.remove('active');
+    }
+
+    function hideGenStatus(){
+      document.getElementById('gen-status').classList.remove('active');
+    }
+
+    function showFailed(msg){
+      document.getElementById('gen-failed-msg').textContent = msg;
+      document.getElementById('gen-failed').classList.add('active');
+    }
+
+    function hideFailed(){
+      document.getElementById('gen-failed').classList.remove('active');
+    }
+
+    function buildBody(){
+      var prompt = document.getElementById('prompt').value.trim();
+      var qualityBoost = document.getElementById('quality-boost').checked;
+      var finalPrompt = prompt;
+      if (qualityBoost) {
+        finalPrompt = 'masterpiece, best quality, highly detailed, ' + prompt;
+      }
+      return {
+        prompt: finalPrompt,
+        negative: document.getElementById('negative').value.trim(),
+        model: document.getElementById('model-select').value,
+        steps: parseInt(document.getElementById('steps').value),
+        cfg: parseInt(document.getElementById('cfg').value),
+        width: parseInt(document.getElementById('width').value),
+        height: parseInt(document.getElementById('height').value),
+        seed: parseInt(document.getElementById('seed').value),
+        sampler: document.getElementById('sampler').value,
+        scheduler: document.getElementById('scheduler').value,
+        vae: document.getElementById('vae-select').value,
+        hires_fix: document.getElementById('hires-fix').checked,
+        loras: collectLoras(),
+      };
+    }
+
+    function retryGenerate(){
+      hideFailed();
+      if (lastPromptBody) doGenerate(lastPromptBody);
+    }
+
+    function generate() {
+      if (generating) return;
+      var prompt = document.getElementById('prompt').value.trim();
+      var model = document.getElementById('model-select').value;
+      if (!prompt) { showError('Enter a prompt'); return; }
+      if (!model) { showError('Select a model'); return; }
+      doGenerate(buildBody());
+    }
+
+    function doGenerate(body){
+      hideError();
+      hideFailed();
+      generating = true;
+      lastPromptBody = body;
+      var btn = document.getElementById('gen-btn');
+      btn.classList.add('btn-generating');
+      showGenStatus();
+      startGenTimer();
+      startQueuePoll();
+
+      fetch('/LeanAI/image-gen/generate', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(body),
+      })
+      .then(function(r){ return r.json(); })
+      .then(function(d){
+        stopGenTimer();
+        generating = false;
+        btn.classList.remove('btn-generating');
+        hideGenStatus();
+        if (d.error) {
+          showFailed(d.error);
+          return;
+        }
+
+        var empty = document.getElementById('gallery-empty');
+        if (empty) empty.style.display = 'none';
+        var gallery = document.getElementById('gallery');
+        var item = document.createElement('div');
+        item.className = 'gallery-item';
+        var origPrompt = body.prompt.replace(/^masterpiece, best quality, highly detailed, /, '');
+        item.setAttribute('onclick', "preview('" + d.image + "', '" + escapeHtml(origPrompt) + "')");
+        item.innerHTML =
+          '<img src="' + d.image + '" loading="lazy" alt="">' +
+          '<div class="meta">' + escapeHtml(origPrompt.substring(0, 60)) + '</div>' +
+          '<button class="del-btn" onclick="event.stopPropagation();deleteImage(0,this.parentElement)" title="Delete">✕</button>';
+        gallery.insertBefore(item, gallery.firstChild);
+
+        if (d.seed !== undefined) {
+          document.getElementById('seed').value = d.seed;
+        }
+        lastPromptBody = null;
+      })
+      .catch(function(err){
+        stopGenTimer();
+        generating = false;
+        btn.classList.remove('btn-generating');
+        hideGenStatus();
+        showFailed('Network error: ' + err.message);
+      });
+    }
+
+    function deleteImage(id, el) {
+      if (!id) { el.remove(); return; }
+      fetch('/LeanAI/image-gen/' + id + '/delete', {method: 'POST'})
+        .then(function(){ el.remove(); });
+    }
+
+    function preview(src, prompt) {
+      document.getElementById('preview-img').src = src;
+      document.getElementById('preview-prompt').textContent = prompt;
+      document.getElementById('preview-overlay').classList.add('open');
+    }
+
+    function closePreview() {
+      document.getElementById('preview-overlay').classList.remove('open');
+    }
+
+    function showError(msg) {
+      var el = document.getElementById('error-msg');
+      el.textContent = msg;
+      el.style.display = 'block';
+    }
+
+    function hideError() {
+      document.getElementById('error-msg').style.display = 'none';
+    }
+
+    function escapeHtml(s) {
+      return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/'/g,'&#39;');
+    }
+  </script>
+
+</body>
+</html>

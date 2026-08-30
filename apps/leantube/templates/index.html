@@ -1,0 +1,230 @@
+{% extends "base.html" %}
+{% block content %}
+
+{% if not no_setup %}
+<div class="setup-wizard">
+    <h1>LeanTube Dashboard</h1>
+    <p class="setup-subtitle">Add a Vice server to browse clips</p>
+
+    <form method="POST" action="{{ url_for('leantube.home') }}" class="setup-form">
+        <input type="hidden" name="action" value="add_profile">
+        <div class="form-row">
+            <div class="form-group">
+                <label for="s-name">Name</label>
+                <input type="text" id="s-name" name="name" placeholder="e.g. Desk PC" required>
+            </div>
+            <div class="form-group">
+                <label for="s-ip">IP Address</label>
+                <input type="text" id="s-ip" name="ip" placeholder="192.168.1.10" required>
+            </div>
+            <div class="form-group">
+                <label for="s-port">Port</label>
+                <input type="number" id="s-port" name="port" placeholder="8766" required>
+            </div>
+            <div class="form-group" style="flex:1.5">
+                <label for="s-pattern">URL Pattern</label>
+                <input type="text" id="s-pattern" name="pattern" value="c/Vice_Clip_{n}">
+                <span class="form-hint"><code>{n}</code> replaced with clip number</span>
+            </div>
+        </div>
+        <button type="submit" class="btn btn-setup" id="add-server-btn">Add Server</button>
+    </form>
+    <script>
+    if (document.querySelector('.flash-success') &&
+        document.querySelector('.flash-success').textContent.includes('scanning')) {
+        setTimeout(function() { location.reload(); }, 2000);
+    }
+    </script>
+
+    {% if profiles %}
+    <div class="setup-profiles">
+        <h3>Added Servers</h3>
+        <div class="table-wrap">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Name</th>
+                        <th>IP</th>
+                        <th>Port</th>
+                        <th>Pattern</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for p in profiles %}
+                    <tr>
+                        <td>{{ p.name }}</td>
+                        <td>{{ p.ip }}</td>
+                        <td>{{ p.port }}</td>
+                        <td>{{ p.pattern }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        <p class="form-hint">Go to <a href="{{ url_for('leantube.settings') }}" style="color:#4af">Settings</a> to scan for clips.</p>
+    </div>
+    {% endif %}
+
+    <details class="admin-collapse">
+        <summary>Admin</summary>
+        <div class="admin-collapse-content">
+            {% if admin %}
+            <p style="color:#7d7;margin-bottom:0.5rem">Logged in as admin</p>
+            <form method="POST" action="{{ url_for('leantube.home') }}">
+                <input type="hidden" name="action" value="admin_logout">
+                <button type="submit" class="btn btn-sm">Logout</button>
+            </form>
+            {% else %}
+            <form method="POST" action="{{ url_for('leantube.home') }}" class="settings-form">
+                <input type="hidden" name="action" value="admin_login">
+                <div class="form-group">
+                    <label for="admin-pw">Admin Password</label>
+                    <input type="password" id="admin-pw" name="password" placeholder="Enter admin password">
+                </div>
+                <button type="submit" class="btn">Login (saved as cookie)</button>
+            </form>
+            {% endif %}
+        </div>
+    </details>
+</div>
+
+{% else %}
+
+<div class="grid-header">
+    <h1>Clips</h1>
+    <div class="search-bar">
+        <input type="text" id="clip-search" placeholder="Search clips..." class="search-input">
+    </div>
+</div>
+
+<div class="clip-grid" id="clip-grid">
+    {% for clip in clips %}
+    {% set has_custom = clip.custom_thumbnail is not none %}
+    {% set thumb = clip.custom_thumbnail or clip.thumbnail %}
+    <div class="clip-card" data-clip-id="{{ clip.id }}" data-clip-url="{{ url_for('leantube.watch', clip_id=clip.id) }}">
+        <a href="{{ url_for('leantube.watch', clip_id=clip.id) }}" class="clip-thumb-link">
+            {% if thumb %}
+                <img src="{{ url_for('leantube.static', filename=thumb) }}"
+                     alt="{{ clip.original_name }}"
+                     class="clip-thumb"
+                     loading="lazy">
+                {% if has_custom %}
+                <span class="clip-badge custom-thumb-badge">Custom</span>
+                {% endif %}
+            {% else %}
+                <div class="clip-thumb clip-thumb-placeholder">
+                    <span>No Thumb</span>
+                </div>
+            {% endif %}
+            {% if clip.local_path %}
+            <span class="clip-badge downloaded" style="bottom:6px;right:6px">Downloaded</span>
+            {% else %}
+            <span class="clip-badge remote" style="bottom:6px;right:6px">Remote</span>
+            {% endif %}
+        </a>
+        <div class="clip-info">
+            <div class="clip-name">
+                {% if admin %}
+                <a href="{{ url_for('leantube.edit', clip_id=clip.id) }}" class="clip-title" onclick="event.stopPropagation()">
+                    {{ clip.custom_name or clip.original_name }}
+                </a>
+                {% else %}
+                <span class="clip-title-static">{{ clip.custom_name or clip.original_name }}</span>
+                {% endif %}
+            </div>
+            <div class="clip-profile">{{ clip.profile.name }}</div>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+
+<script>
+document.getElementById('clip-search')?.addEventListener('input', function() {
+    const q = this.value.toLowerCase();
+    document.querySelectorAll('.clip-card').forEach(function(card) {
+        const title = (card.querySelector('.clip-title')?.textContent || card.querySelector('.clip-title-static')?.textContent || '').toLowerCase();
+        const profile = (card.querySelector('.clip-profile')?.textContent || '').toLowerCase();
+        card.style.display = (!q || title.includes(q) || profile.includes(q)) ? '' : 'none';
+    });
+});
+</script>
+
+{% if admin %}
+<div id="context-menu" class="context-menu" style="display:none">
+    <div class="context-item" id="ctx-edit">Edit Name</div>
+    <div class="context-sep"></div>
+    <div class="context-item" id="ctx-thumb-upload">Upload Thumbnail</div>
+    <div class="context-item" id="ctx-thumb-url">Set Thumbnail URL</div>
+    <div class="context-item" id="ctx-regenthumb">Regenerate from Video</div>
+    <div class="context-item" id="ctx-resetthumb">Reset Custom Thumbnail</div>
+</div>
+
+<input type="file" id="ctx-file-input" accept="image/png,image/jpeg,image/gif,image/webp" style="display:none">
+
+<script>
+let ctxClipId = null;
+
+document.querySelectorAll('.clip-card').forEach(card => {
+    card.addEventListener('contextmenu', function(e) {
+        e.preventDefault();
+        ctxClipId = this.dataset.clipId;
+        const menu = document.getElementById('context-menu');
+        menu.style.display = 'block';
+        menu.style.left = Math.min(e.pageX, window.innerWidth - 220) + 'px';
+        menu.style.top = Math.min(e.pageY, window.innerHeight - 200) + 'px';
+    });
+});
+
+document.addEventListener('click', function() {
+    document.getElementById('context-menu').style.display = 'none';
+});
+
+document.getElementById('ctx-edit').addEventListener('click', function() {
+    if (ctxClipId) window.location.href = '/LeanTube/edit/' + ctxClipId;
+});
+
+document.getElementById('ctx-thumb-upload').addEventListener('click', function() {
+    document.getElementById('ctx-file-input').click();
+});
+
+document.getElementById('ctx-file-input').addEventListener('change', function() {
+    const file = this.files[0];
+    if (!file || !ctxClipId) return;
+    const fd = new FormData();
+    fd.append('file', file);
+    fetch('/LeanTube/api/upload-thumbnail/' + ctxClipId, { method: 'POST', body: fd })
+        .then(r => r.json())
+        .then(data => { if (data.ok) location.reload(); });
+    this.value = '';
+});
+
+document.getElementById('ctx-thumb-url').addEventListener('click', function() {
+    const url = prompt('Enter image URL:');
+    if (!url || !ctxClipId) return;
+    fetch('/LeanTube/api/set-thumbnail-url/' + ctxClipId, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({url: url})
+    })
+    .then(r => r.json())
+    .then(data => { if (data.ok) location.reload(); else alert(data.error); });
+});
+
+document.getElementById('ctx-regenthumb').addEventListener('click', function() {
+    if (!ctxClipId) return;
+    fetch('/LeanTube/api/regenerate-thumbnail/' + ctxClipId, { method: 'POST' })
+        .then(r => r.json())
+        .then(data => { if (data.ok) location.reload(); });
+});
+
+document.getElementById('ctx-resetthumb').addEventListener('click', function() {
+    if (!ctxClipId) return;
+    fetch('/LeanTube/api/reset-thumbnail/' + ctxClipId, { method: 'POST' })
+        .then(r => r.json())
+        .then(data => { if (data.ok) location.reload(); });
+});
+</script>
+{% endif %}
+
+{% endif %}
+{% endblock %}

@@ -1,0 +1,5 @@
+{
+  "name": "Home",
+  "description": "Application launcher",
+  "route": "/Home"
+}

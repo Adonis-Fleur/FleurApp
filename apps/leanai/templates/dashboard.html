@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>LeanAI — Dashboard</title>
+  <link rel="stylesheet" href="/LeanAI/static/leanai.css">
+</head>
+<body>
+
+  <div class="dash-header">
+    <h1>LeanAI{% if user.name %} <span class="user-name">· {{ user.name }}</span>{% endif %}</h1>
+  </div>
+
+  {% if characters %}
+  <div class="grid" id="card-grid">
+    {% for c in characters %}
+    <div class="card" data-id="{{ c.id }}" data-name="{{ c.name }}" onclick="navigate('/LeanAI/characters/{{ c.id }}/chat')">
+      <div class="avatar">
+        {% if c.avatar_path %}
+          <img src="/LeanAI/static/avatars/{{ c.avatar_path }}" alt="{{ c.name }}" style="width:100%;height:100%;object-fit:cover;border-radius:50%">
+        {% else %}
+          {{ c.name[:1] }}
+        {% endif %}
+      </div>
+      <div class="name">{{ c.name }}</div>
+    </div>
+    {% endfor %}
+    <a href="/LeanAI/characters/new" class="card card-new" style="text-decoration:none;display:flex">
+      <span>+</span>
+    </a>
+  </div>
+  {% else %}
+  <div class="empty-state">
+    <div style="font-size: 40px;">✦</div>
+    <p>No characters yet</p>
+  </div>
+  <div class="grid">
+    <a href="/LeanAI/characters/new" class="card card-new" style="text-decoration:none;display:flex">
+      <span>+</span>
+    </a>
+  </div>
+  {% endif %}
+
+  <div class="ctx-backdrop" id="ctx-backdrop" onclick="closeCardMenu()" style="display:none"></div>
+  <div class="card-context-menu" id="card-context-menu">
+    <button onclick="editCard()"><span class="cm-icon">✏️</span> Edit</button>
+    <button onclick="duplicateCard()"><span class="cm-icon">📋</span> Duplicate</button>
+    <button onclick="scanCard()"><span class="cm-icon">🔍</span> Scan memories</button>
+    <button onclick="deleteCard()" class="cm-danger"><span class="cm-icon">🗑</span> Delete</button>
+  </div>
+
+  {% if show_setup %}
+  <div class="overlay" id="setup-overlay">
+    <div class="overlay-card">
+      <h2>Welcome</h2>
+      <p class="sub">Set your name and description so characters know who they're talking to. You can use <code>{<!-- -->{user}}</code> in character prompts later.</p>
+      <form method="POST" action="/LeanAI/setup">
+        <div class="field">
+          <label for="name">Your name</label>
+          <input type="text" id="name" name="name" placeholder="e.g. Alex" autocomplete="off" maxlength="60">
+        </div>
+        <div class="field">
+          <label for="description">About you</label>
+          <input type="text" id="description" name="description" placeholder="e.g. A curious programmer" autocomplete="off" maxlength="200">
+        </div>
+        <div class="btn-row">
+          <button type="submit" class="btn btn-primary">Save</button>
+        </div>
+      </form>
+      <div class="skip-row">
+        <a href="/LeanAI/setup/skip" class="btn-skip">Skip for now</a>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+
+  <div class="fab">
+    <button class="fab-btn" id="fab-btn" onclick="toggleMenu()">☰</button>
+    <div class="fab-menu" id="fab-menu">
+      <a href="/LeanAI/image-gen"><span class="menu-icon">✧</span> Image Gen</a>
+      <a href="/LeanAI/profile"><span class="menu-icon">✧</span> Profile</a>
+      <a href="/LeanAI/settings/ai"><span class="menu-icon">◈</span> AI Settings</a>
+      <a href="/LeanAI/account"><span class="menu-icon">⚙</span> Account</a>
+    </div>
+  </div>
+
+  <script>
+    var ctxCardId = null;
+
+    function toggleMenu() {
+      document.getElementById('fab-menu').classList.toggle('open');
+    }
+    document.addEventListener('click', function(e) {
+      var fab = document.querySelector('.fab');
+      if (!fab.contains(e.target)) {
+        document.getElementById('fab-menu').classList.remove('open');
+      }
+    });
+
+    // ─── Card long-press ───
+
+    var grid = document.getElementById('card-grid');
+    if (grid) {
+      grid.addEventListener('touchstart', function(e) {
+        var card = e.target.closest('.card');
+        if (!card || card.classList.contains('card-new')) return;
+        ctxCardId = card.dataset.id;
+        window._cardLp = setTimeout(function() {
+          window._cardLpFired = true;
+          showCardMenu(e);
+        }, 500);
+      }, {passive: true});
+      grid.addEventListener('touchend', function() { clearTimeout(window._cardLp); }, {passive: true});
+      grid.addEventListener('touchmove', function() { clearTimeout(window._cardLp); }, {passive: true});
+      grid.addEventListener('contextmenu', function(e) {
+        var card = e.target.closest('.card');
+        if (!card || card.classList.contains('card-new')) return;
+        e.preventDefault();
+        ctxCardId = card.dataset.id;
+        showCardMenu(e);
+      });
+    }
+
+    function showCardMenu(e) {
+      var menu = document.getElementById('card-context-menu');
+      var backdrop = document.getElementById('ctx-backdrop');
+      if (window.innerWidth > 480) {
+        var x = (e.touches ? e.touches[0].clientX : e.clientX) + 4;
+        var y = (e.touches ? e.touches[0].clientY : e.clientY) + 4;
+        var maxX = window.innerWidth - menu.offsetWidth - 8;
+        var maxY = window.innerHeight - menu.offsetHeight - 8;
+        menu.style.left = Math.min(x, maxX) + 'px';
+        menu.style.top = Math.min(y, maxY) + 'px';
+      } else {
+        menu.style.left = '';
+        menu.style.top = '';
+      }
+      backdrop.style.display = '';
+      menu.classList.add('open');
+    }
+
+    function closeCardMenu() {
+      document.getElementById('card-context-menu').classList.remove('open');
+      document.getElementById('ctx-backdrop').style.display = 'none';
+    }
+
+    function editCard() {
+      closeCardMenu();
+      if (ctxCardId) navigate('/LeanAI/characters/' + ctxCardId + '/edit');
+    }
+
+    async function duplicateCard() {
+      closeCardMenu();
+      if (!ctxCardId) return;
+      var resp = await fetch('/LeanAI/characters/' + ctxCardId + '/duplicate', { method: 'POST' });
+      var data = await resp.json();
+      if (data.ok) navigate('/LeanAI');
+    }
+
+    async function scanCard() {
+      closeCardMenu();
+      if (!ctxCardId) return;
+      await fetch('/LeanAI/characters/' + ctxCardId + '/chat/scan', { method: 'POST' });
+    }
+
+    async function deleteCard() {
+      closeCardMenu();
+      if (!ctxCardId) return;
+      var name = document.querySelector('.card[data-id="' + ctxCardId + '"] .name');
+      if (!confirm('Delete "' + (name ? name.textContent : 'this character') + '" permanently?')) return;
+      var resp = await fetch('/LeanAI/characters/' + ctxCardId + '/delete', { method: 'POST' });
+      var data = await resp.json();
+      if (data.ok) navigate('/LeanAI');
+    }
+
+    function navigate(url) {
+      window.location.href = url;
+    }
+  </script>
+
+</body>
+</html>

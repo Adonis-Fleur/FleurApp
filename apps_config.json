@@ -1,0 +1,4 @@
+{
+  "enabled_apps": ["home", "leanai", "leantube", "ghostintel", "mailaccess"],
+  "port": 5326
+}

@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>LeanAI — Account</title>
+  <link rel="stylesheet" href="/LeanAI/static/leanai.css">
+</head>
+<body>
+
+  <div class="page-header">
+    <a href="/LeanAI">←</a>
+    <h1>Account Settings</h1>
+  </div>
+
+  {% if msg %}
+    <div style="margin: 12px 24px 0;">
+      <div class="msg">{{ msg }}</div>
+    </div>
+  {% endif %}
+
+  <form method="POST" action="/LeanAI/account">
+    <div class="section-card">
+      <h2>Change ID</h2>
+
+      <div class="field">
+        <label for="current-id">Current ID</label>
+        <input type="text" id="current-id" value="{{ user.id }}" disabled>
+      </div>
+
+      <div class="field">
+        <label for="new_id">New ID</label>
+        <input type="text" id="new_id" name="new_id" placeholder="Enter new ID" autocomplete="off">
+      </div>
+    </div>
+
+    <div class="section-card">
+      <h2>Change Password</h2>
+
+      <div class="field">
+        <label for="current_password">Current password</label>
+        <input type="password" id="current_password" name="current_password" placeholder="Required to make changes" required>
+      </div>
+
+      <div class="field">
+        <label for="new_password">New password</label>
+        <input type="password" id="new_password" name="new_password" placeholder="Leave blank to keep current" autocomplete="new-password">
+      </div>
+    </div>
+
+    <div class="btn-row" style="margin: 0 24px;">
+      <button type="submit" class="btn btn-primary">Save Changes</button>
+    </div>
+  </form>
+
+  <hr class="divider" style="margin:24px">
+
+  <div style="padding:0 24px 32px">
+    <a href="/LeanAI/logout" class="btn btn-danger" style="display:block;text-align:center;text-decoration:none">Logout</a>
+  </div>
+
+</body>
+</html>

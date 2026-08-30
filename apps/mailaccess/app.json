@@ -1,0 +1,5 @@
+{
+  "name": "MailAccess",
+  "description": "Email OSINT Intelligence",
+  "route": "/MailAccess"
+}

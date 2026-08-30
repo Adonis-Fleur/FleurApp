@@ -1,0 +1,581 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>MailAccess</title>
+<style>
+:root{
+  --bg0:#0a0d13; --bg1:#0f131c; --bg2:#151a26; --bg3:#1c2231;
+  --line:#252d40; --line2:#2f3950;
+  --text:#e7e4dc; --dim:#8f97ab; --faint:#5c6478;
+  --red:#e5484d; --cyan:#38c3d0; --green:#5bd08a; --amber:#e8a33d; --purple:#a78bfa;
+  --mono:ui-monospace,'Cascadia Mono','JetBrains Mono',Menlo,Consolas,'Courier New',monospace;
+}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+html{height:100%}
+body{
+  background:
+    radial-gradient(1200px 500px at 80% -10%, rgba(56,195,208,.05), transparent 60%),
+    var(--bg0);
+  color:var(--text);font-family:var(--mono);
+  height:100vh;height:100dvh;display:flex;flex-direction:column;
+  font-size:13px;overflow:hidden;-webkit-font-smoothing:antialiased;
+}
+button,.hamburger,.dossier{touch-action:manipulation}
+
+/* ── TOP BAR ── */
+header{
+  background:var(--bg1);border-bottom:1px solid var(--line);
+  display:flex;align-items:center;gap:18px;padding:0 18px;height:56px;flex-shrink:0;
+}
+.brand{font-size:15px;font-weight:700;letter-spacing:.24em;white-space:nowrap}
+.brand em{color:var(--cyan);font-style:normal}
+.cmdline{
+  flex:1;display:flex;align-items:center;gap:8px;min-width:0;
+  background:var(--bg0);border:1px solid var(--line);border-radius:6px;padding:6px 10px;
+}
+.cmdline .prompt{color:var(--faint);user-select:none;flex-shrink:0}
+.cmdline select{
+  background:transparent;border:none;color:var(--cyan);font-family:var(--mono);
+  font-size:13px;outline:none;cursor:pointer;flex-shrink:0;padding:2px 0;
+}
+.cmdline select option{background:var(--bg2);color:var(--text)}
+.cmdline input{
+  flex:1;min-width:60px;background:transparent;border:none;outline:none;
+  color:var(--text);font-family:var(--mono);font-size:13px;padding:2px 0;
+}
+.cmdline input::placeholder{color:var(--faint)}
+.cmdline input:focus{color:var(--cyan)}
+.run-btn{
+  background:transparent;border:1px solid var(--cyan);color:var(--cyan);
+  font-family:var(--mono);font-weight:700;letter-spacing:.14em;font-size:12px;
+  padding:9px 22px;border-radius:6px;cursor:pointer;transition:all .15s;flex-shrink:0;
+}
+.run-btn:hover:not(:disabled){background:var(--cyan);color:#04121a;box-shadow:0 0 18px rgba(56,195,208,.35)}
+.run-btn:disabled{opacity:.4;cursor:not-allowed}
+.backend{font-size:10px;letter-spacing:.2em;color:var(--faint);white-space:nowrap;display:flex;align-items:center;gap:6px}
+.be-dot{width:6px;height:6px;border-radius:50%;background:var(--green);animation:blink 2.4s infinite}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.25}}
+.hamburger{
+  display:none;width:36px;height:36px;flex-shrink:0;
+  align-items:center;justify-content:center;border-radius:6px;
+  color:var(--dim);font-size:20px;cursor:pointer;user-select:none;
+}
+.hamburger:active{color:var(--cyan)}
+
+/* ── LAYOUT ── */
+.body{display:flex;flex:1;overflow:hidden}
+aside{
+  width:264px;min-width:264px;background:var(--bg1);border-right:1px solid var(--line);
+  display:flex;flex-direction:column;overflow:hidden;
+}
+main{flex:1;overflow-y:auto;padding:22px 26px;padding-bottom:max(22px,env(safe-area-inset-bottom))}
+main::-webkit-scrollbar{width:5px}
+main::-webkit-scrollbar-thumb{background:var(--line2);border-radius:3px}
+
+/* ── SIDEBAR ── */
+.sb-head{
+  display:flex;align-items:center;gap:8px;padding:14px 16px 10px;
+  font-size:10px;letter-spacing:.26em;color:var(--faint);border-bottom:1px solid var(--line);
+}
+.sb-head .cnt{color:var(--dim)}
+.sb-head button{
+  margin-left:auto;background:none;border:1px solid var(--line);color:var(--faint);
+  border-radius:4px;cursor:pointer;font-size:11px;padding:2px 8px;font-family:var(--mono);
+}
+.sb-head button:hover{color:var(--cyan);border-color:var(--cyan)}
+#dossierList{flex:1;overflow-y:auto}
+#dossierList::-webkit-scrollbar{width:4px}
+#dossierList::-webkit-scrollbar-thumb{background:var(--line2)}
+.dossier{
+  position:relative;padding:10px 16px;cursor:pointer;border-left:2px solid transparent;
+  transition:background .12s;
+}
+.dossier:hover{background:var(--bg2)}
+.dossier.sel{background:var(--bg3);border-left-color:var(--cyan)}
+.d-row{display:flex;align-items:center;gap:8px}
+.d-email{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px}
+.d-status{width:7px;height:7px;border-radius:50%;flex-shrink:0}
+.d-status.complete{background:var(--green)} .d-status.running{background:var(--cyan);animation:blink 1s infinite}
+.d-status.failed{background:var(--red)} .d-status.pending{background:var(--amber)}
+.d-score{margin-left:auto;font-size:10px;color:var(--faint);flex-shrink:0}
+.d-score.hot{color:var(--red)}
+.d-meta{display:flex;align-items:center;gap:8px;margin-top:3px;font-size:10px;color:var(--faint)}
+.d-del{display:none;margin-left:auto;background:none;border:none;color:var(--faint);cursor:pointer;font-size:12px;padding:0 2px}
+.dossier:hover .d-del{display:block}
+.d-del:hover{color:var(--red)}
+.sb-empty{padding:20px 16px;font-size:11px;color:var(--faint);line-height:1.7}
+
+/* ── MAIN ── */
+.view{max-width:1060px;margin:0 auto}
+.section-label{
+  display:flex;align-items:center;gap:12px;margin:26px 0 12px;
+  font-size:10px;letter-spacing:.26em;color:var(--faint);text-transform:uppercase;
+}
+.section-label::after{content:'';flex:1;height:1px;background:var(--line)}
+.section-label:first-child{margin-top:0}
+
+/* ── REPORT HEADER ── */
+.rep-head{display:flex;align-items:flex-start;gap:16px;flex-wrap:wrap}
+.rep-email{font-size:19px;font-weight:700;letter-spacing:.03em;word-break:break-all}
+.rep-email .canon{display:block;font-size:11px;color:var(--faint);font-weight:400;margin-top:3px;letter-spacing:.06em}
+.stamps{display:flex;gap:10px;align-items:center;margin-left:auto;flex-wrap:wrap}
+.stamp{
+  position:relative;border:2px solid currentColor;color:var(--dim);
+  font-size:11px;font-weight:700;letter-spacing:.22em;padding:5px 12px;border-radius:3px;
+  transform:rotate(-1.2deg);user-select:none;
+}
+.stamp::after{content:'';position:absolute;inset:3px;border:1px dashed currentColor;border-radius:1px;opacity:.55;pointer-events:none}
+.stamp.complete{color:var(--green);background:rgba(91,208,138,.06)}
+.stamp.running{color:var(--cyan);background:rgba(56,195,208,.07)}
+.stamp.failed{color:var(--red);background:rgba(229,72,77,.08)}
+.stamp.pending{color:var(--amber);background:rgba(232,163,61,.07)}
+.stamp.critical{color:var(--red);background:rgba(229,72,77,.08)}
+.stamp.high{color:var(--amber);background:rgba(232,163,61,.07)}
+.stamp.medium{color:var(--amber)}
+.stamp.low{color:var(--dim)}
+.stamp.ok{color:var(--green);background:rgba(91,208,138,.06)}
+
+/* ── STATUS / SCORE ── */
+.score-row{display:flex;align-items:center;gap:14px;margin-top:14px}
+.score-bar{flex:1;height:8px;background:var(--bg2);border:1px solid var(--line);border-radius:4px;overflow:hidden}
+.score-fill{height:100%;background:linear-gradient(90deg,var(--red),var(--amber));transition:width .4s}
+.score-txt{font-size:11px;color:var(--dim);letter-spacing:.1em;white-space:nowrap}
+.summary{font-size:12px;color:var(--dim);line-height:1.7;margin-top:12px}
+.summary b{color:var(--text);font-weight:600}
+
+/* ── IDENTITY ── */
+.id-card{background:var(--bg1);border:1px solid var(--line);border-radius:8px;padding:16px 18px}
+.id-name{font-size:16px;font-weight:700;color:var(--purple);letter-spacing:.04em}
+.id-conf{margin-top:6px;font-size:11px;color:var(--dim)}
+.id-conf b{color:var(--amber);letter-spacing:.08em}
+.id-reason{margin-top:8px;font-size:12px;color:var(--dim);line-height:1.6}
+
+/* ── MODULE CHIPS ── */
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{
+  font-size:10px;letter-spacing:.08em;padding:4px 10px;border-radius:20px;
+  border:1px solid var(--line2);color:var(--dim);background:var(--bg1);
+}
+.chip.success{color:var(--green);border-color:rgba(91,208,138,.35)}
+.chip.partial{color:var(--amber);border-color:rgba(232,163,61,.35)}
+.chip.failed{color:var(--red);border-color:rgba(229,72,77,.35)}
+.chip.skipped{opacity:.5}
+.chip.running{color:var(--cyan);border-color:rgba(56,195,208,.4);animation:blink 1.4s infinite}
+
+/* ── FINDINGS ── */
+.mod-block{background:var(--bg1);border:1px solid var(--line);border-radius:8px;overflow:hidden;margin-bottom:14px}
+.mod-hdr{
+  display:flex;align-items:center;gap:10px;padding:11px 16px;
+  border-bottom:1px solid var(--line);background:var(--bg2);
+}
+.mod-name{font-size:12px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:var(--cyan)}
+.mod-count{margin-left:auto;font-size:10px;color:var(--faint);letter-spacing:.1em}
+.finding{padding:10px 16px;border-bottom:1px solid rgba(37,45,64,.6)}
+.finding:last-child{border-bottom:none}
+.f-row{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
+.f-plat{font-size:12.5px;color:var(--text);font-weight:600}
+.f-url{font-size:11.5px;color:var(--cyan);text-decoration:none;word-break:break-all}
+.f-url:hover{text-decoration:underline}
+.badge{
+  font-size:9px;letter-spacing:.14em;padding:1px 7px;border-radius:8px;border:1px solid;
+  text-transform:uppercase;font-weight:700;
+}
+.badge.high{color:var(--amber);border-color:rgba(232,163,61,.5)}
+.badge.critical{color:var(--red);border-color:rgba(229,72,77,.5)}
+.badge.medium{color:var(--amber)}
+.badge.low{color:var(--dim);border-color:var(--line2)}
+.badge.confirmed{color:var(--green);border-color:rgba(91,208,138,.5)}
+.badge.probable{color:var(--cyan);border-color:rgba(56,195,208,.5)}
+.badge.unknown{color:var(--faint);border-color:var(--line2)}
+.f-meta{display:flex;flex-wrap:wrap;gap:4px 16px;margin-top:5px;font-size:11px;color:var(--faint)}
+.f-meta b{color:var(--dim);font-weight:600}
+
+/* ── EMPTY / LOADING ── */
+.empty{
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  min-height:52vh;text-align:center;color:var(--faint);gap:10px;
+}
+.empty .big{font-size:42px;opacity:.5}
+.empty h2{font-size:16px;color:var(--dim);letter-spacing:.1em;font-weight:600}
+.empty p{font-size:12px;line-height:1.8;max-width:380px}
+.empty .kbd{border:1px solid var(--line2);border-radius:4px;padding:2px 7px;color:var(--cyan);font-size:11px}
+.running-line{display:flex;align-items:center;gap:10px;margin-top:16px;color:var(--cyan);font-size:12px;letter-spacing:.12em}
+.spinner{width:12px;height:12px;border:2px solid rgba(56,195,208,.25);border-top-color:var(--cyan);border-radius:50%;animation:spin .9s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.error-box{background:rgba(229,72,77,.07);border:1px solid rgba(229,72,77,.4);color:var(--red);border-radius:8px;padding:12px 16px;font-size:12px;line-height:1.6}
+
+/* ── MOBILE ── */
+#backdrop{
+  position:fixed;inset:0;z-index:55;background:rgba(3,5,9,.62);
+  opacity:0;pointer-events:none;transition:opacity .2s;
+}
+@media(max-width:760px){
+  main{padding:16px 14px calc(16px + env(safe-area-inset-bottom))}
+  .view{max-width:100%;margin:0}
+
+  /* header wraps to two rows: [☰ brand …status] / [command line EXECUTE] */
+  header{
+    flex-wrap:wrap;gap:8px 10px;height:auto;
+    padding:8px 12px;padding-top:max(8px,env(safe-area-inset-top));
+  }
+  .brand{font-size:13px;letter-spacing:.18em}
+  .hamburger{display:flex}
+  .backend{margin-left:auto;font-size:9px}
+  .cmdline{order:4;flex:1 1 auto;min-width:0;padding:8px 10px}
+  .cmdline .prompt{display:none}
+  .cmdline input,.cmdline select{font-size:16px} /* prevents iOS focus zoom */
+  .run-btn{order:5;padding:9px 14px;font-size:11px;letter-spacing:.12em}
+
+  /* sidebar becomes a slide-in drawer */
+  aside{
+    position:fixed;top:0;left:0;bottom:0;width:min(85vw,320px);min-width:0;z-index:60;
+    border-right:1px solid var(--line2);
+    transform:translateX(-103%);transition:transform .22s ease;
+    box-shadow:12px 0 32px rgba(0,0,0,.5);
+  }
+  body.sb-open aside{transform:none}
+  body.sb-open #backdrop{opacity:1;pointer-events:auto}
+
+  .rep-email{font-size:16px}
+  .stamps{width:100%;margin-left:0}
+  .empty .kbd{word-break:break-all}
+}
+
+@media(max-width:480px){
+  .brand{letter-spacing:.14em}
+  .backend span:not(.be-dot){display:none} /* dot only */
+}
+
+@media(hover:none){ /* touch devices: no hover, expose hidden actions */
+  .dossier{padding:12px 16px}
+  .d-del{display:block;padding:6px;font-size:13px}
+  .sb-head button{padding:6px 10px}
+  .run-btn:hover:not(:disabled){background:transparent;color:var(--cyan);box-shadow:none}
+  .run-btn:active:not(:disabled){background:var(--cyan);color:#04121a;box-shadow:0 0 18px rgba(56,195,208,.35)}
+}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="hamburger" onclick="toggleSidebar()">☰</div>
+  <div class="brand">MAIL<em>ACCESS</em></div>
+  <div class="cmdline">
+    <span class="prompt">$</span>
+    <span style="color:var(--dim)">mailaccess</span>
+    <select id="cmdSel">
+      <option value="investigate">investigate</option>
+    </select>
+    <input id="target" type="text" placeholder="example@email.com"
+           autocomplete="off" spellcheck="false"
+           onkeydown="if(event.key==='Enter')runScan()">
+  </div>
+  <button class="run-btn" id="runBtn" onclick="runScan()">EXECUTE</button>
+  <div class="backend"><span class="be-dot"></span><span>BACKEND</span></div>
+</header>
+
+<div id="backdrop" onclick="closeSidebar()"></div>
+
+<div class="body">
+  <aside id="sidebar">
+    <div class="sb-head">
+      DOSSIERS <span class="cnt" id="cnt">0</span>
+      <button id="reloadBtn" onclick="loadDossiers()" title="Refresh">&#x21bb;</button>
+      <button onclick="toggleSidebar()" title="Close">&#10005;</button>
+    </div>
+    <div id="dossierList"></div>
+  </aside>
+  <main id="main">
+    <div class="view" id="view"></div>
+  </main>
+</div>
+
+<script>
+let currentId = null;
+let pollTimer = null;
+
+const $ = id => document.getElementById(id);
+
+function esc(s) {
+  if (s === null || s === undefined) return '';
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;')
+    .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+function fmtTime(iso) {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (isNaN(d)) return iso;
+  return d.toLocaleString(undefined,{year:'2-digit',month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'});
+}
+function shortId(id) { return id ? id.slice(0,8) : ''; }
+
+function toggleSidebar() {
+  document.body.classList.toggle('sb-open');
+}
+function closeSidebar() {
+  document.body.classList.remove('sb-open');
+}
+const isMobile = () => window.matchMedia('(max-width:760px)').matches;
+
+/* ── DOSSIERS ── */
+async function loadDossiers(selectId) {
+  try {
+    const res = await fetch('/MailAccess/api/investigations');
+    const data = await res.json();
+    $('cnt').textContent = data.total || 0;
+    const list = $('dossierList');
+    const items = data.items || [];
+    if (!items.length) {
+      list.innerHTML = '<div class="sb-empty">No dossiers yet.<br>Run an investigation — everything is saved here.</div>';
+      return;
+    }
+    list.innerHTML = items.map(it => {
+      const st = (it.status || 'unknown').toLowerCase();
+      const score = it.exposure_score;
+      const sel = it.id === selectId ? ' sel' : '';
+      return `<div class="dossier${sel}" data-id="${esc(it.id)}" onclick="openDossier('${esc(it.id)}')">
+        <div class="d-row">
+          <span class="d-status ${st}"></span>
+          <span class="d-email" title="${esc(it.email)}">${esc(it.email)}</span>
+          <span class="d-score${score >= 70 ? ' hot' : ''}">${score !== null && score !== undefined ? score : '–'}</span>
+        </div>
+        <div class="d-meta">
+          <span>${esc(it.status)}</span><span>·</span><span>${fmtTime(it.created_at)}</span>
+          <button class="d-del" title="Delete" onclick="event.stopPropagation();delDossier('${esc(it.id)}')">&#10005;</button>
+        </div>
+      </div>`;
+    }).join('');
+    if (items.some(i => (i.status||'').toLowerCase() === 'running')) {
+      setTimeout(() => loadDossiers(selectId), 4000);
+    }
+  } catch(e) {
+    $('dossierList').innerHTML = '<div class="sb-empty">Cannot reach backend.</div>';
+  }
+}
+
+async function delDossier(id) {
+  if (!confirm('Delete this dossier?')) return;
+  await fetch('/MailAccess/api/investigation/' + id, {method:'DELETE'});
+  if (currentId === id) { currentId = null; renderEmpty(); }
+  loadDossiers();
+}
+
+/* ── RUN ── */
+async function runScan() {
+  const email = $('target').value.trim();
+  if (!email) { $('target').focus(); return; }
+  const btn = $('runBtn');
+  btn.disabled = true;
+  renderScanning(email);
+  try {
+    const res = await fetch('/MailAccess/api/investigate', {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({email})
+    });
+    const data = await res.json();
+    if (!res.ok || data.error) {
+      renderError(data.error || ('HTTP ' + res.status));
+      return;
+    }
+    currentId = data.id;
+    pollReport(data.id, email);
+  } catch(e) {
+    renderError('Backend unreachable: ' + e.message);
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+/* ── REPORT ── */
+async function openDossier(id) {
+  currentId = id;
+  if (isMobile()) closeSidebar();
+  clearTimeout(pollTimer);
+  renderLoading();
+  const report = await fetchReport(id);
+  if (!report) return;
+  renderReport(report, null);
+  if (['pending','running'].includes((report.status||'').toLowerCase())) {
+    pollReport(id, report.email);
+  }
+  loadDossiers(id);
+}
+
+async function fetchReport(id) {
+  try {
+    const res = await fetch('/MailAccess/api/report/' + id);
+    if (res.status === 404) { renderError('Dossier not found (deleted?).'); return null; }
+    return await res.json();
+  } catch(e) {
+    renderError('Backend unreachable: ' + e.message);
+    return null;
+  }
+}
+
+function pollReport(id, email) {
+  clearTimeout(pollTimer);
+  pollTimer = setTimeout(async () => {
+    const report = await fetchReport(id);
+    if (!report) return;
+    const st = (report.status||'').toLowerCase();
+    if (report.error && st === 'failed') renderReport(report, null);
+    else renderReport(report, null);
+    if (['pending','running'].includes(st)) {
+      pollReport(id, email);
+    } else {
+      loadDossiers(id);
+      renderReport(report, null);
+    }
+  }, 2500);
+}
+
+/* ── RENDERERS ── */
+function renderEmpty() {
+  $('view').innerHTML = `
+    <div class="empty">
+      <div class="big">&#9993;</div>
+      <h2>NO DOSSIER OPEN</h2>
+      <p>Run an investigation from the command line above, or pick a saved dossier from the sidebar.<br>
+      Every scan is kept on disk in <span class="kbd">~/.mailaccess/mailaccess.db</span>.</p>
+    </div>`;
+}
+
+function renderScanning(email) {
+  $('view').innerHTML = `
+    <div class="section-label">Investigation</div>
+    <div class="rep-head">
+      <div class="rep-email">${esc(email)}</div>
+      <div class="stamps"><span class="stamp running">STARTING</span></div>
+    </div>
+    <div class="running-line"><span class="spinner"></span> QUEUED — waiting for the backend to pick it up…</div>`;
+}
+
+function renderLoading() {
+  $('view').innerHTML = '<div class="running-line" style="margin-top:30px"><span class="spinner"></span> LOADING DOSSIER…</div>';
+}
+
+function renderError(msg) {
+  $('view').innerHTML = `<div class="error-box">&#9888; ${esc(msg)}</div>`;
+}
+
+function statusStamp(report) {
+  const st = (report.status||'unknown').toLowerCase();
+  if (st === 'complete') return '<span class="stamp complete">COMPLETE</span>';
+  if (st === 'failed') return '<span class="stamp failed">FAILED</span>';
+  if (st === 'running') return '<span class="stamp running">RUNNING</span>';
+  return '<span class="stamp pending">PENDING</span>';
+}
+
+function renderReport(r, email) {
+  const st = (r.status||'').toLowerCase();
+  const risk = (r.risk_level||'').toLowerCase();
+  const riskStamp = ['critical','high','medium','low'].includes(risk)
+    ? `<span class="stamp ${risk}">${esc(risk.toUpperCase())} RISK</span>` : '';
+  const score = r.exposure_score;
+  const scoreHtml = score !== null && score !== undefined ? `
+    <div class="score-row">
+      <div class="score-bar"><div class="score-fill" style="width:${Math.max(0,Math.min(score,100))}%"></div></div>
+      <span class="score-txt">EXPOSURE ${score}/100</span>
+    </div>` : '';
+
+  const name = r.name_consensus || {};
+  const identityHtml = (name.confirmed_name || r.confirmed_name) ? `
+    <div class="section-label">Identity</div>
+    <div class="id-card">
+      <div class="id-name">${esc(name.confirmed_name || r.confirmed_name)}</div>
+      <div class="id-conf">CONFIDENCE: <b>${esc((name.name_confidence || 'unknown').toUpperCase())}</b></div>
+      ${name.name_reasoning ? `<div class="id-reason">${esc(name.name_reasoning)}</div>` : ''}
+    </div>` : '';
+
+  const runs = r.module_runs || [];
+  const chips = runs.length ? `
+    <div class="section-label">Modules <span style="color:var(--faint);letter-spacing:.1em">${runs.length}</span></div>
+    <div class="chips">
+      ${runs.map(run => `<span class="chip ${esc((run.status||'').toLowerCase())}">${esc(run.module_name)}</span>`).join('')}
+    </div>` : '';
+
+  const fbm = r.findings_by_module || {};
+  const mods = Object.keys(fbm).filter(m => (fbm[m]||[]).length);
+  const findingsHtml = mods.length ? `
+    <div class="section-label">Findings <span style="color:var(--faint);letter-spacing:.1em">${r.findings ? r.findings.length : ''}</span></div>
+    ${mods.map(m => renderModule(m, fbm[m])).join('')}` : '';
+
+  const summary = r.summary ? `<div class="summary">${esc(r.summary)}</div>` : '';
+
+  $('view').innerHTML = `
+    <div class="section-label">Investigation</div>
+    <div class="rep-head">
+      <div class="rep-email">${esc(r.original_email || r.email || email)}
+        ${r.canonical_email && r.canonical_email !== (r.original_email||r.email) ? `<span class="canon">CANONICAL: ${esc(r.canonical_email)}</span>` : ''}
+      </div>
+      <div class="stamps">${riskStamp}${statusStamp(r)}</div>
+    </div>
+    ${scoreHtml}
+    ${r.error ? `<div class="error-box" style="margin-top:12px">${esc(r.error)}</div>` : ''}
+    ${summary}
+    ${identityHtml}
+    ${chips}
+    ${findingsHtml}`;
+}
+
+function renderModule(name, findings) {
+  const rows = findings.map(f => {
+    const fUrl = f.url || f.profile_url || f.link || f.domain || f.website || '';
+    const conf = (f.confidence||'').toLowerCase();
+    const sev = (f.severity||'').toLowerCase();
+    const badges = [];
+    if (['confirmed','probable','high','medium','low','unknown'].includes(conf)) {
+      badges.push(`<span class="badge ${conf}">${esc(conf.toUpperCase())}</span>`);
+    }
+    if (['critical','high','medium','low'].includes(sev)) {
+      badges.push(`<span class="badge ${sev}">${esc(sev.toUpperCase())}</span>`);
+    }
+    const meta = f.metadata && typeof f.metadata === 'object'
+      ? metaHtml(f.metadata, fUrl) : '';
+    return `<div class="finding">
+      <div class="f-row">
+        <span class="f-plat">${esc(f.platform || f.service || f.source || f.site || name)}</span>
+        ${fUrl ? `<a class="f-url" href="${esc(fUrl)}" target="_blank" rel="noopener">${esc(fUrl)}</a>` : ''}
+        ${badges.join('')}
+      </div>
+      ${meta}
+    </div>`;
+  }).join('');
+  return `<div class="mod-block">
+    <div class="mod-hdr">
+      <span class="mod-name">${esc(name)}</span>
+      <span class="mod-count">${findings.length} RECORD${findings.length===1?'':'S'}</span>
+    </div>
+    ${rows}
+  </div>`;
+}
+
+function metaHtml(meta, fUrl) {
+  const skip = new Set(['url','profile_url','link','domain','website']);
+  const parts = [];
+  for (const [k, v] of Object.entries(meta)) {
+    if (skip.has(k)) continue;
+    if (v === null || v === undefined || v === '') continue;
+    let val;
+    if (Array.isArray(v)) val = v.slice(0,6).map(x => x && x.display_name ? x.display_name : x).join(', ');
+    else if (typeof v === 'object') val = JSON.stringify(v).slice(0,80);
+    else val = String(v);
+    if (val.length > 90) val = val.slice(0,87) + '…';
+    if (fUrl && (val === fUrl)) continue;
+    parts.push(`<span><b>${esc(k)}</b> ${esc(val)}</span>`);
+  }
+  if (!parts.length) return '';
+  return `<div class="f-meta">${parts.join('')}</div>`;
+}
+
+/* ── INIT ── */
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeSidebar(); });
+window.addEventListener('resize', () => { if (!isMobile()) closeSidebar(); });
+renderEmpty();
+loadDossiers();
+</script>
+</body>
+</html>

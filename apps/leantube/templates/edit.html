@@ -1,0 +1,83 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="edit-container">
+    <a href="{{ url_for('leantube.home') }}" class="back-link">&larr; Back</a>
+    <h1>Edit Clip</h1>
+
+    <div class="edit-preview">
+        <p><strong>Original:</strong> {{ clip.original_name }}</p>
+        <p><strong>Custom Name:</strong> {{ clip.custom_name or '(none)' }}</p>
+        <p><strong>Profile:</strong> {{ clip.profile.name }}</p>
+        <p><strong>URL:</strong> <code>http://{{ clip.profile.ip }}:{{ clip.profile.port }}/{{ clip.original_name }}</code></p>
+    </div>
+
+    <div class="edit-thumb-preview">
+        <img src="{{ url_for('leantube.static', filename=thumb_src) if thumb_src else '' }}"
+             alt="Thumbnail" class="edit-thumb-img"
+             onerror="this.parentElement.innerHTML='<span style=\'color:#555\'>No thumbnail</span>'">
+    </div>
+
+    <h2 style="font-size:1rem;margin:1.5rem 0 0.75rem;border-bottom:1px solid #2a2a2a;padding-bottom:0.5rem">Name</h2>
+    <form method="POST" class="settings-form" style="max-width:480px">
+        <input type="hidden" name="action" value="save_name">
+        <div class="form-group">
+            <label for="custom_name">Display Name</label>
+            <input type="text" id="custom_name" name="custom_name"
+                   value="{{ clip.custom_name or clip.original_name }}"
+                   placeholder="Enter a custom name">
+        </div>
+        <button type="submit" class="btn">Save Name</button>
+    </form>
+
+    <h2 style="font-size:1rem;margin:1.5rem 0 0.75rem;border-bottom:1px solid #2a2a2a;padding-bottom:0.5rem">Thumbnail</h2>
+
+    <div class="edit-thumb-options">
+        <form method="POST" class="settings-form" style="max-width:480px">
+            <input type="hidden" name="action" value="set_thumb_url">
+            <div class="form-group">
+                <label for="thumb_url">Set from Image URL</label>
+                <input type="text" id="thumb_url" name="thumb_url" placeholder="https://example.com/image.jpg">
+            </div>
+            <button type="submit" class="btn">Set from URL</button>
+        </form>
+
+        <div class="upload-area">
+            <label for="thumb-upload" class="btn upload-btn">Upload from Gallery</label>
+            <input type="file" id="thumb-upload" accept="image/png,image/jpeg,image/gif,image/webp" style="display:none">
+            <span id="upload-status" style="font-size:0.8rem;color:#888;margin-left:0.5rem"></span>
+        </div>
+
+        <div style="display:flex;gap:0.5rem;flex-wrap:wrap;margin-top:0.5rem">
+            <form method="POST" action="{{ url_for('leantube.regenerate_thumbnail', clip_id=clip.id) }}">
+                <button type="submit" class="btn btn-sm">Regenerate from Video</button>
+            </form>
+            <button class="btn btn-sm btn-danger" id="reset-thumb-btn">Reset Custom Thumbnail</button>
+        </div>
+    </div>
+</div>
+
+<script>
+document.getElementById('thumb-upload').addEventListener('change', function() {
+    const file = this.files[0];
+    if (!file) return;
+    const status = document.getElementById('upload-status');
+    status.textContent = 'Uploading...';
+    const fd = new FormData();
+    fd.append('file', file);
+    fetch('/LeanTube/api/upload-thumbnail/{{ clip.id }}', { method: 'POST', body: fd })
+        .then(r => r.json())
+        .then(data => {
+            if (data.ok) { status.textContent = 'Uploaded!'; location.reload(); }
+            else { status.textContent = 'Error: ' + data.error; }
+        })
+        .catch(e => { status.textContent = 'Upload failed'; });
+});
+
+document.getElementById('reset-thumb-btn').addEventListener('click', function() {
+    if (!confirm('Reset to auto-generated thumbnail?')) return;
+    fetch('/LeanTube/api/reset-thumbnail/{{ clip.id }}', { method: 'POST' })
+        .then(r => r.json())
+        .then(data => { if (data.ok) location.reload(); });
+});
+</script>
+{% endblock %}

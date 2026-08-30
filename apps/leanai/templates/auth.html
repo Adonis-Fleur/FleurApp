@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>LeanAI — Sign In</title>
+  <link rel="stylesheet" href="/LeanAI/static/leanai.css">
+</head>
+<body class="auth-page">
+  <div class="auth-card">
+    <h1>LeanAI</h1>
+    <p class="sub">Sign in to your characters</p>
+
+    {% if msg %}
+      <div class="msg">{{ msg }}</div>
+    {% endif %}
+
+    <form method="POST" action="/LeanAI/login">
+      <div class="field">
+        <label for="id">ID</label>
+        <input type="text" id="id" name="id" placeholder="Enter your ID" required autocomplete="off">
+      </div>
+      <div class="field">
+        <label for="password">Password</label>
+        <input type="password" id="password" name="password" placeholder="Enter your password" required>
+      </div>
+      <div class="btn-row">
+        <button type="submit" formaction="/LeanAI/signup" class="btn btn-primary">Sign Up</button>
+        <button type="submit" class="btn btn-secondary">Login</button>
+      </div>
+    </form>
+  </div>
+</body>
+</html>

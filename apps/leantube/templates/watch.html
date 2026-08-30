@@ -1,0 +1,86 @@
+{% extends "base.html" %}
+{% block content %}
+
+<div class="watch-layout" id="watch-layout">
+    <div class="watch-primary">
+        <div class="video-container" id="video-container">
+            <video id="video-player" class="video-player" controls playsinline preload="auto">
+                <source src="{{ url_for('leantube.serve_video', clip_id=clip.id) }}" type="video/mp4">
+            </video>
+            <div class="video-controls-overlay" id="video-controls-overlay">
+                <button class="ctrl-btn" id="btn-cinema" title="Cinema Mode">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <rect x="3" y="3" width="18" height="18" rx="2"/>
+                        <path d="M21 7H3"/>
+                    </svg>
+                </button>
+            </div>
+        </div>
+
+        <div class="video-info">
+            <h1 class="video-title">{{ clip.custom_name or clip.original_name }}</h1>
+            <span class="video-server">{{ clip.profile.name }}</span>
+            {% if admin %}
+            <a href="{{ url_for('leantube.edit', clip_id=clip.id) }}" class="btn btn-sm video-edit-btn">Edit</a>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="watch-recs">
+        <div class="rec-search">
+            <input type="text" id="rec-search-input" class="search-input" placeholder="Search recommended...">
+        </div>
+        <div class="recommended-list" id="recommended-list">
+            {% for rec in recommended %}
+            <a href="{{ url_for('leantube.watch', clip_id=rec.id) }}" class="rec-item">
+                <div class="rec-thumb-wrap">
+                    {% set rec_thumb = rec.custom_thumbnail or rec.thumbnail %}
+                    {% if rec_thumb %}
+                    <img src="{{ url_for('leantube.static', filename=rec_thumb) }}" alt="" class="rec-thumb" loading="lazy">
+                    {% else %}
+                    <div class="rec-thumb rec-thumb-placeholder">
+                        <span>No Thumb</span>
+                    </div>
+                    {% endif %}
+                </div>
+                <div class="rec-info">
+                    <span class="rec-title">{{ rec.custom_name or rec.original_name }}</span>
+                    <span class="rec-profile">{{ rec.profile.name }}</span>
+                </div>
+            </a>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+
+<script>
+(function() {
+    var player = document.getElementById('video-player');
+    var container = document.getElementById('video-container');
+    var layout = document.getElementById('watch-layout');
+    var btnCinema = document.getElementById('btn-cinema');
+    var recSearch = document.getElementById('rec-search-input');
+
+    // ---- Cinema Mode ----
+    btnCinema.addEventListener('click', function() {
+        layout.classList.toggle('cinema-mode');
+        btnCinema.classList.toggle('active');
+        if (layout.classList.contains('cinema-mode')) {
+            btnCinema.title = 'Exit Cinema Mode';
+        } else {
+            btnCinema.title = 'Cinema Mode';
+        }
+    });
+
+    // ---- Recommended search ----
+    recSearch.addEventListener('input', function() {
+        var q = this.value.toLowerCase();
+        document.querySelectorAll('.rec-item').forEach(function(item) {
+            var title = (item.querySelector('.rec-title')?.textContent || '').toLowerCase();
+            var profile = (item.querySelector('.rec-profile')?.textContent || '').toLowerCase();
+            item.style.display = (!q || title.includes(q) || profile.includes(q)) ? '' : 'none';
+        });
+    });
+})();
+</script>
+{% endblock %}

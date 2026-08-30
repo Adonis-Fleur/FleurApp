@@ -1,0 +1,20 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Home</title>
+  <link rel="stylesheet" href="{{ url_for('home.static', filename='style.css') }}">
+</head>
+<body>
+  <div class="container">
+    <ul class="app-list">
+      {% for app in apps %}
+        {% if app.enabled and app.key != 'home' %}
+          <li><a href="{{ app.route }}">{{ app.name }}</a></li>
+        {% endif %}
+      {% endfor %}
+    </ul>
+  </div>
+</body>
+</html>
