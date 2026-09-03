@@ -1,4 +1,4 @@
 {
-  "enabled_apps": ["home", "leanai", "leantube", "ghostintel", "mailaccess"],
+  "enabled_apps": ["home", "leanai", "leantube", "mailaccess", "fleursteamfarm"],
   "port": 5326
 }

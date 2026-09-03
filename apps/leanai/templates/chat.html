@@ -23,7 +23,6 @@
       <div class="hamburger-menu" id="hamburger-menu">
         <button onclick="closeHamburger(); togglePanel('memories')"><span class="hm-icon">🧠</span> Memories</button>
         <button onclick="closeHamburger(); togglePanel('misc')"><span class="hm-icon">📍</span> Info</button>
-        <button onclick="closeHamburger(); togglePanel('npcs')"><span class="hm-icon">👤</span> NPCs</button>
         <div class="hamburger-divider"></div>
         <button onclick="closeHamburger(); scanNow()"><span class="hm-icon">🔍</span> Scan memories</button>
         <button onclick="closeHamburger(); clearChat()"><span class="hm-icon">🗑</span> Clear conversation</button>
@@ -47,19 +46,15 @@
 
     {% for m in messages %}
     {% if not (loop.first and greeting_shown and m.role == 'assistant' and m.content == greeting_shown) %}
-    {% set is_npc = m.role == 'assistant' and m.speaker and m.speaker != '' %}
-    <div class="msg-row {{ 'user' if m.role == 'user' else 'npc' if is_npc else '' }}" data-id="{{ m.id }}" data-role="{{ m.role }}" data-content="{{ m.content | e | replace('\n', ' ') | replace('\r', ' ') }}"{% if m.speaker %} data-speaker="{{ m.speaker }}"{% endif %}>
+    <div class="msg-row {{ 'user' if m.role == 'user' else '' }}" data-id="{{ m.id }}" data-role="{{ m.role }}" data-content="{{ m.content | e | replace('\n', ' ') | replace('\r', ' ') }}">
       <div class="msg-avatar">
         {% if m.role == 'user' %}
           {% if user.avatar_path %}<img src="/LeanAI/static/avatars/{{ user.avatar_path }}" alt="">{% else %}{{ user.name[:1] or 'U' }}{% endif %}
-        {% elif is_npc %}
-          {{ m.speaker[:1] }}
         {% else %}
           {% if character.avatar_path %}<img src="/LeanAI/static/avatars/{{ character.avatar_path }}" alt="">{% else %}{{ character.name[:1] }}{% endif %}
         {% endif %}
       </div>
       <div class="msg-bubble">
-        {%- if is_npc %}<div class="npc-badge">{{ m.speaker }}</div>{% endif -%}
         {{- m.content -}}
         {%- if m.file_path %}
           <a href="/LeanAI/static/uploads/{{ m.file_path }}" class="msg-file" target="_blank">
@@ -120,14 +115,6 @@
       <button class="panel-close" onclick="closePanels()">✕</button>
     </div>
     <div class="panel-body" id="misc-body"></div>
-  </div>
-
-  <div class="side-panel" id="panel-npcs">
-    <div class="panel-header">
-      <h2>👤 NPCs</h2>
-      <button class="panel-close" onclick="closePanels()">✕</button>
-    </div>
-    <div class="panel-body" id="npcs-body"></div>
   </div>
 
   <form class="chat-input-wrap" id="chat-form" onsubmit="sendMessage(event)">
@@ -364,9 +351,9 @@
           if (data.user_content) {
             appendMsg('user', data.user_content);
           }
-          if (data.messages) {
+            if (data.messages) {
             data.messages.forEach(function(msg) {
-              appendMsg('assistant', msg.content, null, msg.speaker || '');
+              appendMsg('assistant', msg.content, null, '');
             });
           } else if (data.reply) {
             appendMsg('assistant', data.reply);
@@ -379,7 +366,6 @@
       }
 
       sending = false;
-      scrollBottom();
     }
 
     // ─── Delete ───
@@ -447,7 +433,7 @@
           if (tmpRow) tmpRow.dataset.content = tmpContent;
           if (data.messages) {
             data.messages.forEach(function(msg) {
-              appendMsg('assistant', msg.content, null, msg.speaker || '');
+              appendMsg('assistant', msg.content);
             });
           } else if (data.reply) {
             appendMsg('assistant', data.reply);
@@ -536,7 +522,7 @@
               if (tmpRow && mode === 'send') tmpRow.dataset.content = tmpContent;
               if (payload.messages) {
                 payload.messages.forEach(function(msg) {
-                  appendMsg('assistant', msg.content, null, msg.speaker || '');
+                  appendMsg('assistant', msg.content);
                 });
               }
               callExtract();
@@ -559,21 +545,17 @@
 
     // ─── Append message ───
 
-    function appendMsg(role, content, file, speaker) {
-      var isNpc = role === 'assistant' && speaker && speaker !== '';
+    function appendMsg(role, content, file) {
       var row = document.createElement('div');
-      row.className = 'msg-row' + (role === 'user' ? ' user' : '') + (isNpc ? ' npc' : '');
+      row.className = 'msg-row' + (role === 'user' ? ' user' : '');
       row.dataset.role = role;
       row.dataset.content = content;
       row.dataset.id = '0';
-      if (speaker) row.dataset.speaker = speaker;
 
       var avatar = document.createElement('div');
       avatar.className = 'msg-avatar';
       if (role === 'user') {
         avatar.textContent = '{{ user.name[:1] or "U" }}';
-      } else if (isNpc) {
-        avatar.textContent = speaker[0];
       } else {
         avatar.textContent = '{{ character.name[:1] }}';
       }
@@ -581,13 +563,6 @@
 
       var bubble = document.createElement('div');
       bubble.className = 'msg-bubble';
-
-      if (isNpc) {
-        var badge = document.createElement('div');
-        badge.className = 'npc-badge';
-        badge.textContent = speaker;
-        bubble.appendChild(badge);
-      }
 
       bubble.appendChild(document.createTextNode(content));
 
@@ -647,12 +622,10 @@
         } else {
           var parts = [];
           if (data.memories) parts.push(data.memories + ' memories');
-          if (data.npcs) parts.push(data.npcs + ' NPCs');
           showToast('Scan done: ' + (parts.join(', ') || 'nothing new'));
         }
         loadMemories();
         loadState();
-        loadNpcs();
       } catch (err) {
         showToast('Scan failed - connection error');
       } finally {
@@ -680,7 +653,6 @@
         panel.classList.add('open');
         if (name === 'memories') loadMemories();
         if (name === 'misc') loadState();
-        if (name === 'npcs') loadNpcs();
       }
     }
 
@@ -764,56 +736,6 @@
         closeHamburger();
       }
     });
-
-    // ─── NPC panel ───
-
-    function loadNpcs() {
-      var body = document.getElementById('npcs-body');
-      body.innerHTML = '<p style="color:#605070">Loading...</p>';
-      fetch('/LeanAI/characters/' + charId + '/npcs')
-        .then(function(r) { return r.json(); })
-        .then(function(data) {
-          if (!data.npcs || data.npcs.length === 0) {
-            body.innerHTML = '<p>No NPCs detected yet.</p><p style="font-size:12px;color:#605070;margin-top:8px">NPCs are auto-discovered during conversation. Just keep chatting!</p>';
-            return;
-          }
-          body.innerHTML = data.npcs.map(function(n) {
-            return '<div class="npc-item">'
-              + '<div class="npc-item-header">'
-                + '<div class="npc-item-avatar">' + escHtml(n.name[0]) + '</div>'
-                + '<div class="npc-item-info">'
-                  + '<div class="npc-item-name">' + escHtml(n.name) + '</div>'
-                  + (n.relationship ? '<div class="npc-item-rel">' + escHtml(n.relationship) + '</div>' : '')
-                + '</div>'
-                + '<label class="toggle-row npc-toggle">'
-                  + '<input type="checkbox" ' + (n.is_active ? 'checked' : '') + ' onchange="toggleNpc(' + n.id + ', this.checked)">'
-                  + '<div class="toggle-track"><div class="toggle-knob"></div></div>'
-                + '</label>'
-              + '</div>'
-              + (n.personality ? '<div class="npc-item-pers">' + escHtml(n.personality) + '</div>' : '')
-              + '<button class="btn btn-danger btn-sm npc-del-btn" onclick="deleteNpc(' + n.id + ')">Remove</button>'
-            + '</div>';
-          }).join('');
-        });
-    }
-
-    function toggleNpc(npcId, active) {
-      fetch('/LeanAI/characters/' + charId + '/npcs/' + npcId + '/toggle', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({is_active: active ? 1 : 0}),
-      }).catch(function(){});
-    }
-
-    function deleteNpc(npcId) {
-      if (!confirm('Remove this NPC?')) return;
-      fetch('/LeanAI/characters/' + charId + '/npcs/' + npcId + '/delete', {
-        method: 'POST',
-      }).then(function(r) { return r.json(); }).then(function(data) {
-        if (data.ok) loadNpcs();
-      });
-    }
-
 
   </script>
 

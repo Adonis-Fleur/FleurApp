@@ -1,5 +1,4 @@
 import os
-import re
 import json
 import secrets
 import time
@@ -21,8 +20,7 @@ from .models import (
     get_ai_settings, save_ai_settings,
     get_character_state, save_character_state,
     add_memory, get_memories, clear_memories,
-    add_npc, get_character_npcs, get_active_npcs,
-    set_npc_active, delete_npc,
+    add_npc, get_character_npcs,
     add_generated_image, get_image_history, delete_generated_image,
 )
 from . import extraction as _ex
@@ -39,14 +37,6 @@ AVATAR_DIR = os.path.join(os.path.dirname(__file__), 'static', 'avatars')
 UPLOAD_DIR = os.path.join(os.path.dirname(__file__), 'static', 'uploads')
 ALLOWED_EXT = {'.png', '.jpg', '.jpeg', '.gif', '.webp'}
 TEXT_EXT = {'.txt', '.md', '.csv'}
-
-NPC_FORMAT = (
-    "\n\nWhen someone else is present in the scene, you may speak as them when appropriate. "
-    "Prefix their dialogue with [Name:] — for example:\n"
-    "[Mom:] No, thank you.\n"
-    "For your own dialogue, speak without any prefix."
-)
-
 
 @bp.record_once
 def setup(state):
@@ -430,20 +420,8 @@ def chat_send(char_id):
     if reply is None:
         return jsonify({'error': 'Failed to reach LLM. Check AI Settings.'}), 502
 
-    active_npcs = get_active_npcs(char_id)
-    parsed = _parse_npc_response(reply, active_npcs)
-    msg_ids = []
-    for speaker, content in parsed:
-        mid = create_message(char_id, 'assistant', content, speaker=speaker)
-        msg_ids.append(mid)
-    if not msg_ids:
-        mid = create_message(char_id, 'assistant', reply)
-        msg_ids.append(mid)
-        parsed = [('', reply)]
-
-    reply_messages = [{'speaker': s, 'content': c} for s, c in parsed if c.strip()]
-    if not reply_messages:
-        reply_messages = [{'speaker': '', 'content': reply}]
+    mid = create_message(char_id, 'assistant', reply)
+    reply_messages = [{'speaker': '', 'content': reply}]
 
     return jsonify({'messages': reply_messages, 'file_path': file_path})
 
@@ -526,17 +504,8 @@ def chat_regenerate(char_id):
     if reply is None:
         return jsonify({'error': 'Failed to reach LLM. Check AI Settings.'}), 502
 
-    active_npcs = get_active_npcs(char_id)
-    parsed = _parse_npc_response(reply, active_npcs)
-    for speaker, content in parsed:
-        create_message(char_id, 'assistant', content, speaker=speaker)
-    if not parsed:
-        create_message(char_id, 'assistant', reply)
-        parsed = [('', reply)]
-
-    reply_messages = [{'speaker': s, 'content': c} for s, c in parsed if c.strip()]
-    if not reply_messages:
-        reply_messages = [{'speaker': '', 'content': reply}]
+    create_message(char_id, 'assistant', reply)
+    reply_messages = [{'speaker': '', 'content': reply}]
 
     return jsonify({'messages': reply_messages})
 
@@ -574,17 +543,8 @@ def chat_resend(char_id):
     if reply is None:
         return jsonify({'error': 'Failed to reach LLM. Check AI Settings.'}), 502
 
-    active_npcs = get_active_npcs(char_id)
-    parsed = _parse_npc_response(reply, active_npcs)
-    for speaker, content in parsed:
-        create_message(char_id, 'assistant', content, speaker=speaker)
-    if not parsed:
-        create_message(char_id, 'assistant', reply)
-        parsed = [('', reply)]
-
-    reply_messages = [{'speaker': s, 'content': c} for s, c in parsed if c.strip()]
-    if not reply_messages:
-        reply_messages = [{'speaker': '', 'content': reply}]
+    create_message(char_id, 'assistant', reply)
+    reply_messages = [{'speaker': '', 'content': reply}]
 
     return jsonify({'messages': reply_messages, 'user_content': msg['content'], 'user_file': msg.get('file_path', '')})
 
@@ -685,17 +645,8 @@ def chat_stream(char_id):
             yield sse_event('error', {'error': 'Failed to reach LLM. Check AI Settings.'})
             return
 
-        active_npcs = get_active_npcs(char_id)
-        parsed = _parse_npc_response(full_reply, active_npcs)
-        for speaker, content in parsed:
-            create_message(char_id, 'assistant', content, speaker=speaker)
-        if not parsed:
-            create_message(char_id, 'assistant', full_reply)
-            parsed = [('', full_reply)]
-
-        reply_messages = [{'speaker': s, 'content': c} for s, c in parsed if c.strip()]
-        if not reply_messages:
-            reply_messages = [{'speaker': '', 'content': full_reply}]
+        create_message(char_id, 'assistant', full_reply)
+        reply_messages = [{'speaker': '', 'content': full_reply}]
 
         yield sse_event('done', {'messages': reply_messages})
 
@@ -989,40 +940,6 @@ def chat_state(char_id):
     return jsonify({'state': state})
 
 
-# ─── NPCs ───
-
-@bp.route('/characters/<int:char_id>/npcs', methods=['GET'])
-def chat_npcs(char_id):
-    user = _login_required()
-    char = get_character(char_id, user['id'])
-    if not char:
-        return jsonify({'error': 'Not authorized'}), 403
-    npcs = get_character_npcs(char_id)
-    return jsonify({'npcs': npcs})
-
-
-@bp.route('/characters/<int:char_id>/npcs/<int:npc_id>/toggle', methods=['POST'])
-def chat_npc_toggle(char_id, npc_id):
-    user = _login_required()
-    char = get_character(char_id, user['id'])
-    if not char:
-        return jsonify({'error': 'Not authorized'}), 403
-    data = request.get_json(silent=True) or request.form
-    is_active = int(data.get('is_active', 1))
-    set_npc_active(npc_id, char_id, is_active)
-    return jsonify({'ok': True})
-
-
-@bp.route('/characters/<int:char_id>/npcs/<int:npc_id>/delete', methods=['POST'])
-def chat_npc_delete(char_id, npc_id):
-    user = _login_required()
-    char = get_character(char_id, user['id'])
-    if not char:
-        return jsonify({'error': 'Not authorized'}), 403
-    delete_npc(npc_id, char_id)
-    return jsonify({'ok': True})
-
-
 # ─── AI Settings ───
 
 @bp.route('/settings/ai', methods=['GET', 'POST'])
@@ -1037,9 +954,6 @@ def settings_ai():
         context_length = int(request.form.get('context_length', 1024))
         temperature = float(request.form.get('temperature', 0.7))
         system_prompt = request.form.get('system_prompt', '').strip()
-        fmt_stripped = NPC_FORMAT.strip()
-        if system_prompt.endswith(fmt_stripped):
-            system_prompt = system_prompt[:-len(fmt_stripped)].rstrip()
         llm_endpoint = request.form.get('llm_endpoint', '').strip().rstrip('/')
         llm_model = request.form.get('llm_model', '').strip()
         context_messages = int(request.form.get('context_messages', 50))
@@ -1061,7 +975,7 @@ def settings_ai():
                 pass
 
     settings = get_ai_settings(user['id'])
-    display_prompt = (settings['system_prompt'] + NPC_FORMAT) if settings['system_prompt'] else NPC_FORMAT.lstrip()
+    display_prompt = settings['system_prompt']
 
     if settings['llm_endpoint'] and not models:
         try:
@@ -1236,7 +1150,6 @@ def _build_system_prompt(system_prompt, char, user):
     main_parts = []
     if system_prompt and not char.get('ignore_global_prompt'):
         main_parts.append(system_prompt)
-    main_parts.append(NPC_FORMAT.lstrip())
     parts.append('\n\n'.join(main_parts))
 
     parts.append(f"Character: {char['personality']}")
@@ -1261,18 +1174,6 @@ def _build_system_prompt(system_prompt, char, user):
         mem_lines = [f"• {m['content']}" for m in memories]
         parts.append("Recent memories:\n" + '\n'.join(mem_lines))
 
-    active_npcs = get_active_npcs(char['id'])
-    if active_npcs:
-        npc_lines = []
-        for n in active_npcs:
-            desc = n['name']
-            if n.get('relationship'):
-                desc += f" ({n['relationship']})"
-            if n.get('personality'):
-                desc += f": {n['personality']}"
-            npc_lines.append('- ' + desc)
-        parts.append("Active NPCs:\n" + '\n'.join(npc_lines))
-
     return '\n\n'.join(parts)
 
 
@@ -1286,8 +1187,6 @@ def _build_lm_messages(system, messages, max_tokens, max_messages=50):
     for m in messages:
         role = 'assistant' if m['role'] == 'assistant' else 'user'
         content = m['content']
-        if m['role'] == 'assistant' and m.get('speaker', ''):
-            content = f"[{m['speaker']:}] {content}"
         if normalized and normalized[-1]['role'] == role:
             normalized[-1]['content'] += '\n\n' + content
         else:
@@ -1309,32 +1208,6 @@ def _build_lm_messages(system, messages, max_tokens, max_messages=50):
     lm.extend(selected)
 
     return lm
-
-
-def _parse_npc_response(response, active_npcs):
-    if not response or not active_npcs:
-        return [('', response or '')]
-    npc_names = [n['name'] for n in active_npcs]
-    escaped = [re.escape(n) for n in npc_names]
-    pattern = re.compile(r'^\[(' + '|'.join(escaped) + r')\]:\s*', re.MULTILINE)
-    lines = response.split('\n')
-    result = []
-    current_speaker = ''
-    current_lines = []
-    for line in lines:
-        match = pattern.match(line)
-        if match:
-            if current_lines:
-                result.append((current_speaker, '\n'.join(current_lines).strip()))
-            current_speaker = match.group(1)
-            rest = line[match.end():]
-            current_lines = [rest] if rest else []
-        else:
-            current_lines.append(line)
-    if current_lines or current_speaker != '':
-        result.append((current_speaker, '\n'.join(current_lines).strip()))
-    result = [(s, c) for s, c in result if c.strip()]
-    return result if result else [('', response.strip())]
 
 
 def _call_lm_studio(endpoint, model, messages, temperature, max_tokens):
